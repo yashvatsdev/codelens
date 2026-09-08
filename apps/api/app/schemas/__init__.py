@@ -1,4 +1,5 @@
 from app.schemas.finding import (
+    AnalysisSummaryResponse,
     FindingBase,
     FindingCreate,
     FindingResponse,
@@ -17,6 +18,7 @@ from app.schemas.repository import (
 )
 
 __all__ = [
+    "AnalysisSummaryResponse",
     "FindingBase",
     "FindingCreate",
     "FindingResponse",

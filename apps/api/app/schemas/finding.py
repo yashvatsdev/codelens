@@ -23,3 +23,11 @@ class FindingResponse(FindingBase):
 
     model_config = ConfigDict(from_attributes=True)
 
+
+class AnalysisSummaryResponse(BaseModel):
+    repository_id: int
+    files_analyzed: int
+    total_findings: int
+    findings: list[FindingResponse] = []
+
+    model_config = ConfigDict(from_attributes=True)

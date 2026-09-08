@@ -3,8 +3,10 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
+from app.models.finding import Finding
 from app.models.repository import Repository
 from app.models.source_file import SourceFile
+from app.schemas.finding import AnalysisSummaryResponse, FindingResponse
 from app.schemas.repository import (
     GitHubMetadataRequest,
     GitHubMetadataResponse,
@@ -14,6 +16,7 @@ from app.schemas.repository import (
     RepositoryResponse,
     SourceFileResponse,
 )
+from app.services.analyzer import analyze_repository
 from app.services.github import (
     GitHubAPIError,
     GitHubRateLimitError,
@@ -267,6 +270,44 @@ def get_repository_files(
         .order_by(SourceFile.path)
     ).scalars().all()
     return files
+
+
+@router.post("/{repository_id}/analyze", response_model=AnalysisSummaryResponse)
+def analyze_repository_endpoint(
+    repository_id: int,
+    db: Session = Depends(get_db),
+):
+    """Run static code analysis on stored Python files for a repository."""
+    repository = db.get(Repository, repository_id)
+    if not repository:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Repository with id {repository_id} not found",
+        )
+
+    result = analyze_repository(repository_id=repository.id, db=db)
+    return result
+
+
+@router.get("/{repository_id}/findings", response_model=list[FindingResponse])
+def get_repository_findings(
+    repository_id: int,
+    db: Session = Depends(get_db),
+):
+    """Retrieve stored static analysis findings for a repository."""
+    repository = db.get(Repository, repository_id)
+    if not repository:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Repository with id {repository_id} not found",
+        )
+
+    findings = db.execute(
+        select(Finding)
+        .where(Finding.repository_id == repository_id)
+        .order_by(Finding.id)
+    ).scalars().all()
+    return findings
 
 
 @router.delete("/{repository_id}")
