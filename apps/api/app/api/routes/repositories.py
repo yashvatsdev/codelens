@@ -1,3 +1,4 @@
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
@@ -11,6 +12,7 @@ from app.schemas.repository import (
     RepositoryCreate,
     RepositoryResponse,
 )
+from app.services.github import parse_github_url
 from app.services.github import (
     GitHubAPIError,
     GitHubRateLimitError,

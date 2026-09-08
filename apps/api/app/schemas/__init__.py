@@ -6,6 +6,7 @@ from app.schemas.repository import (
     RepositoryResponse,
 )
 
+__all__ = ["GitHubRepositoryCreate", "RepositoryCreate", "RepositoryResponse"]
 __all__ = [
     "GitHubMetadataRequest",
     "GitHubMetadataResponse",
