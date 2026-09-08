@@ -1,4 +1,3 @@
-from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
@@ -9,17 +8,19 @@ from app.schemas.repository import (
     GitHubMetadataRequest,
     GitHubMetadataResponse,
     GitHubRepositoryCreate,
+    IngestionResponse,
     RepositoryCreate,
     RepositoryResponse,
 )
-from app.services.github import parse_github_url
 from app.services.github import (
     GitHubAPIError,
     GitHubRateLimitError,
     GitHubRepoNotFoundError,
+    GitHubServiceError,
     fetch_github_metadata,
     parse_github_url,
 )
+from app.services.ingestion import ingest_repository
 
 router = APIRouter(prefix="/repositories", tags=["repositories"])
 
@@ -199,6 +200,48 @@ def get_repository(
             detail=f"Repository with id {repository_id} not found",
         )
     return repository
+
+
+@router.post("/{repository_id}/ingest", response_model=IngestionResponse)
+def ingest_repository_endpoint(
+    repository_id: int,
+    db: Session = Depends(get_db),
+):
+    """Ingest source files from a stored GitHub repository.
+
+    Looks up the repository by ID, fetches the file tree from GitHub,
+    retrieves supported source file contents, and returns an ingestion summary.
+    """
+    repository = db.get(Repository, repository_id)
+    if not repository:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Repository with id {repository_id} not found",
+        )
+
+    try:
+        result = ingest_repository(
+            owner=repository.owner,
+            repo=repository.name,
+            branch=repository.default_branch,
+        )
+    except GitHubRepoNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except GitHubRateLimitError as e:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=str(e),
+        )
+    except GitHubServiceError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(e),
+        )
+
+    return result
 
 
 @router.delete("/{repository_id}")

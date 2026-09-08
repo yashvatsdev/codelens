@@ -2,6 +2,7 @@ import json
 import re
 import urllib.error
 import urllib.request
+from dataclasses import dataclass, field
 from dataclasses import dataclass
 from urllib.parse import urlparse
 
@@ -42,6 +43,94 @@ class GitHubRepoMetadata:
     description: str | None
     default_branch: str
     url: str
+
+
+@dataclass(frozen=True)
+class GitHubTreeEntry:
+    """A single entry from a GitHub repository tree."""
+    path: str
+    type: str       # "blob" or "tree"
+    sha: str
+    size: int = 0   # size in bytes (only for blobs)
+
+
+@dataclass(frozen=True)
+class GitHubFileContent:
+    """Contents of a single file fetched from GitHub."""
+    path: str
+    sha: str
+    content: str
+    size: int
+
+
+# File extensions considered as analyzable source code.
+SUPPORTED_EXTENSIONS: frozenset[str] = frozenset({
+    ".py", ".js", ".ts", ".tsx", ".jsx",
+    ".java", ".kt", ".kts",
+    ".go", ".rs", ".rb",
+    ".c", ".cpp", ".cc", ".cxx", ".h", ".hpp",
+    ".cs", ".swift", ".m",
+    ".php", ".scala", ".ex", ".exs",
+    ".sh", ".bash", ".zsh",
+    ".sql",
+    ".html", ".css", ".scss", ".less",
+    ".json", ".yaml", ".yml", ".toml",
+    ".md", ".txt", ".rst",
+    ".xml", ".graphql", ".proto",
+    ".dockerfile",
+    ".tf", ".hcl",
+})
+
+# Maximum individual file size to fetch (100 KB).
+MAX_FILE_SIZE_BYTES: int = 100_000
+
+
+def is_supported_file(path: str, size: int = 0) -> bool:
+    """Return True if the file path has a supported extension and is within size limits."""
+    if size > MAX_FILE_SIZE_BYTES:
+        return False
+    # Handle extensionless files with known names
+    basename = path.rsplit("/", 1)[-1].lower()
+    if basename in ("dockerfile", "makefile", "rakefile", "gemfile", "procfile"):
+        return True
+    _, _, ext = basename.rpartition(".")
+    if not ext:
+        return False
+    return f".{ext}" in SUPPORTED_EXTENSIONS
+
+
+def _github_api_request(url: str, timeout: int = 10) -> dict | list:
+    """Make a GET request to the GitHub API and return parsed JSON."""
+    req = urllib.request.Request(
+        url,
+        headers={
+            "User-Agent": "CodeLens-App",
+            "Accept": "application/vnd.github+json",
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as err:
+        if err.code == 404:
+            raise GitHubRepoNotFoundError(
+                f"GitHub resource not found: {url}"
+            ) from err
+        if err.code == 403:
+            raise GitHubRateLimitError(
+                "GitHub API rate limit exceeded. Please try again later."
+            ) from err
+        raise GitHubAPIError(
+            f"GitHub API returned error {err.code}: {err.reason}"
+        ) from err
+    except urllib.error.URLError as err:
+        raise GitHubAPIError(
+            f"Failed to reach GitHub API: {err.reason}"
+        ) from err
+    except TimeoutError as err:
+        raise GitHubAPIError(
+            "Request to GitHub API timed out."
+        ) from err
 
 
 def parse_github_url(raw_url: str) -> ParsedGitHubRepo:
@@ -119,6 +208,7 @@ def parse_github_url(raw_url: str) -> ParsedGitHubRepo:
 
 
 def fetch_github_metadata(raw_url: str, timeout: int = 10) -> GitHubRepoMetadata:
+    """Fetch public repository metadata from GitHub API for a given repository URL."""
     """Fetch public repository metadata from GitHub API for a given repository URL.
 
     Extracts:
@@ -137,6 +227,7 @@ def fetch_github_metadata(raw_url: str, timeout: int = 10) -> GitHubRepoMetadata
     parsed = parse_github_url(raw_url)
 
     api_url = f"https://api.github.com/repos/{parsed.owner}/{parsed.name}"
+    payload = _github_api_request(api_url, timeout=timeout)
     req = urllib.request.Request(
         api_url,
         headers={
@@ -183,4 +274,69 @@ def fetch_github_metadata(raw_url: str, timeout: int = 10) -> GitHubRepoMetadata
         description=description,
         default_branch=default_branch,
         url=html_url,
+    )
+
+
+def fetch_repo_tree(
+    owner: str,
+    repo: str,
+    branch: str = "main",
+    timeout: int = 15,
+) -> list[GitHubTreeEntry]:
+    """Fetch the full recursive file tree of a GitHub repository.
+
+    Uses the GitHub Git Trees API with ?recursive=1 to get the entire tree
+    in a single request.
+
+    Returns a list of GitHubTreeEntry objects.
+    Raises GitHubServiceError subclasses on failure.
+    """
+    api_url = (
+        f"https://api.github.com/repos/{owner}/{repo}"
+        f"/git/trees/{branch}?recursive=1"
+    )
+    payload = _github_api_request(api_url, timeout=timeout)
+
+    entries: list[GitHubTreeEntry] = []
+    for item in payload.get("tree", []):
+        entries.append(
+            GitHubTreeEntry(
+                path=item["path"],
+                type=item["type"],
+                sha=item["sha"],
+                size=item.get("size", 0),
+            )
+        )
+    return entries
+
+
+def fetch_file_content(
+    owner: str,
+    repo: str,
+    path: str,
+    timeout: int = 10,
+) -> GitHubFileContent:
+    """Fetch the decoded text content of a single file from a GitHub repository.
+
+    Uses the GitHub Contents API which returns base64-encoded content
+    for files under 1 MB.
+
+    Returns a GitHubFileContent with the decoded text.
+    Raises GitHubServiceError subclasses on failure.
+    """
+    api_url = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}"
+    payload = _github_api_request(api_url, timeout=timeout)
+
+    import base64
+    raw_content = payload.get("content", "")
+    try:
+        decoded = base64.b64decode(raw_content).decode("utf-8", errors="replace")
+    except Exception:
+        decoded = ""
+
+    return GitHubFileContent(
+        path=payload.get("path", path),
+        sha=payload.get("sha", ""),
+        content=decoded,
+        size=payload.get("size", len(decoded)),
     )

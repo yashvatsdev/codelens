@@ -4,10 +4,6 @@ import unittest
 import urllib.error
 from unittest.mock import MagicMock, patch
 
-from app.db.database import SessionLocal, engine
-from app.models.repository import Repository
-from app.schemas.repository import GitHubRepositoryCreate, RepositoryCreate
-from app.services.github import parse_github_url
 from fastapi import HTTPException
 
 from app.api.routes.repositories import (
@@ -19,7 +15,6 @@ from app.api.routes.repositories import (
     get_repositories,
     get_repository,
 )
-from fastapi import HTTPException
 from app.db.database import SessionLocal
 from app.models.repository import Repository
 from app.schemas.repository import (
@@ -234,7 +229,6 @@ class TestGitHubMetadataEndpoint(unittest.TestCase):
 class TestRepositoryDatabaseEndpoints(unittest.TestCase):
     def setUp(self):
         self.db = SessionLocal()
-        # Clean up any test repositories
         self._cleanup()
 
     def tearDown(self):
@@ -286,4 +280,3 @@ class TestRepositoryDatabaseEndpoints(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

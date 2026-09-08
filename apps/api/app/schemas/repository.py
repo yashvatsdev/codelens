@@ -50,3 +50,23 @@ class RepositoryResponse(RepositoryBase):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class IngestionFileResponse(BaseModel):
+    """Metadata about a single ingested file."""
+    path: str
+    sha: str
+    size: int
+
+
+class IngestionResponse(BaseModel):
+    """Summary returned after ingesting a repository's source files."""
+    owner: str
+    repo: str
+    branch: str
+    total_tree_entries: int
+    files_identified: int
+    files_fetched: int
+    files_skipped: int
+    fetched_files: list[IngestionFileResponse] = []
+    errors: list[str] = []
