@@ -1,4 +1,7 @@
-from app.schemas.repository import RepositoryCreate, RepositoryResponse
+from app.schemas.repository import (
+    GitHubRepositoryCreate,
+    RepositoryCreate,
+    RepositoryResponse,
+)
 
-__all__ = ["RepositoryCreate", "RepositoryResponse"]
-
+__all__ = ["GitHubRepositoryCreate", "RepositoryCreate", "RepositoryResponse"]
