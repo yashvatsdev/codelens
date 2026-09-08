@@ -270,6 +270,28 @@ class TestAnalyzerEndpoints(unittest.TestCase):
             get_repository_findings(999999, db=self.db)
         self.assertEqual(ctx.exception.status_code, 404)
 
+    def test_post_analyze_endpoint_no_source_files(self):
+        from app.api.routes.repositories import analyze_repository_endpoint
+
+        empty_repo = Repository(
+            github_id="analyzer-endpoint-org/empty-repo",
+            name="empty-repo",
+            full_name="analyzer-endpoint-org/empty-repo",
+            owner="analyzer-endpoint-org",
+            url="https://github.com/analyzer-endpoint-org/empty-repo",
+            default_branch="main",
+        )
+        self.db.add(empty_repo)
+        self.db.commit()
+        self.db.refresh(empty_repo)
+
+        res = analyze_repository_endpoint(empty_repo.id, db=self.db)
+        self.assertEqual(res.repository_id, empty_repo.id)
+        self.assertEqual(res.files_analyzed, 0)
+        self.assertEqual(res.total_findings, 0)
+        self.assertEqual(len(res.findings), 0)
+
+
 
 if __name__ == "__main__":
     unittest.main()
