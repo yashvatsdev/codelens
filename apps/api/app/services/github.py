@@ -1,6 +1,29 @@
+import json
 import re
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
 from urllib.parse import urlparse
+
+
+class GitHubServiceError(Exception):
+    """Base exception for GitHub service errors."""
+    pass
+
+
+class GitHubRepoNotFoundError(GitHubServiceError):
+    """Raised when a repository is not found or is private."""
+    pass
+
+
+class GitHubRateLimitError(GitHubServiceError):
+    """Raised when the GitHub API rate limit is exceeded."""
+    pass
+
+
+class GitHubAPIError(GitHubServiceError):
+    """Raised when GitHub API returns an unexpected error."""
+    pass
 
 
 @dataclass(frozen=True)
@@ -8,6 +31,16 @@ class ParsedGitHubRepo:
     owner: str
     name: str
     full_name: str
+    url: str
+
+
+@dataclass(frozen=True)
+class GitHubRepoMetadata:
+    owner: str
+    name: str
+    full_name: str
+    description: str | None
+    default_branch: str
     url: str
 
 
@@ -84,3 +117,70 @@ def parse_github_url(raw_url: str) -> ParsedGitHubRepo:
         url=f"https://github.com/{full_name}",
     )
 
+
+def fetch_github_metadata(raw_url: str, timeout: int = 10) -> GitHubRepoMetadata:
+    """Fetch public repository metadata from GitHub API for a given repository URL.
+
+    Extracts:
+      - owner (str)
+      - repository name (str)
+      - description (str | None)
+      - default_branch (str)
+      - url (str)
+
+    Raises:
+      - ValueError: If the provided URL is invalid.
+      - GitHubRepoNotFoundError: If repository is not found or private (HTTP 404).
+      - GitHubRateLimitError: If GitHub API rate limits are reached (HTTP 403).
+      - GitHubAPIError: On any other GitHub or network connection error.
+    """
+    parsed = parse_github_url(raw_url)
+
+    api_url = f"https://api.github.com/repos/{parsed.owner}/{parsed.name}"
+    req = urllib.request.Request(
+        api_url,
+        headers={
+            "User-Agent": "CodeLens-App",
+            "Accept": "application/vnd.github+json",
+        },
+    )
+
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except urllib.error.HTTPError as err:
+        if err.code == 404:
+            raise GitHubRepoNotFoundError(
+                f"GitHub repository '{parsed.full_name}' was not found or is private."
+            ) from err
+        if err.code == 403:
+            raise GitHubRateLimitError(
+                "GitHub API rate limit exceeded. Please try again later."
+            ) from err
+        raise GitHubAPIError(
+            f"GitHub API returned error {err.code}: {err.reason}"
+        ) from err
+    except urllib.error.URLError as err:
+        raise GitHubAPIError(
+            f"Failed to reach GitHub API: {err.reason}"
+        ) from err
+    except TimeoutError as err:
+        raise GitHubAPIError(
+            "Request to GitHub API timed out."
+        ) from err
+
+    owner = payload.get("owner", {}).get("login") or parsed.owner
+    name = payload.get("name") or parsed.name
+    full_name = payload.get("full_name") or f"{owner}/{name}"
+    description = payload.get("description")
+    default_branch = payload.get("default_branch") or "main"
+    html_url = payload.get("html_url") or parsed.url
+
+    return GitHubRepoMetadata(
+        owner=owner,
+        name=name,
+        full_name=full_name,
+        description=description,
+        default_branch=default_branch,
+        url=html_url,
+    )

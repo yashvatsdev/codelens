@@ -28,6 +28,23 @@ class GitHubRepositoryCreate(BaseModel):
     default_branch: str | None = Field(default=None, description="Optional default branch override")
 
 
+class GitHubMetadataRequest(BaseModel):
+    """Schema for fetching GitHub repository metadata by URL."""
+    url: str = Field(..., description="GitHub repository URL (e.g. https://github.com/owner/repo)")
+
+
+class GitHubMetadataResponse(BaseModel):
+    """Schema representing public metadata fetched for a GitHub repository."""
+    owner: str
+    name: str
+    full_name: str
+    description: str | None = None
+    default_branch: str
+    url: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class RepositoryResponse(RepositoryBase):
     id: int
     created_at: datetime

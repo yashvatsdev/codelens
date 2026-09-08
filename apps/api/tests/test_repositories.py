@@ -1,17 +1,34 @@
+import io
+import json
 import unittest
+import urllib.error
+from unittest.mock import MagicMock, patch
 
-from app.db.database import SessionLocal, engine
-from app.models.repository import Repository
-from app.schemas.repository import GitHubRepositoryCreate, RepositoryCreate
-from app.services.github import parse_github_url
+from fastapi import HTTPException
+
 from app.api.routes.repositories import (
     connect_github_repository,
     create_repository,
     delete_repository,
+    get_github_repository_metadata,
+    get_github_repository_metadata_query,
     get_repositories,
     get_repository,
 )
-from fastapi import HTTPException
+from app.db.database import SessionLocal
+from app.models.repository import Repository
+from app.schemas.repository import (
+    GitHubMetadataRequest,
+    GitHubRepositoryCreate,
+    RepositoryCreate,
+)
+from app.services.github import (
+    GitHubAPIError,
+    GitHubRateLimitError,
+    GitHubRepoNotFoundError,
+    fetch_github_metadata,
+    parse_github_url,
+)
 
 
 class TestGitHubUrlParser(unittest.TestCase):
@@ -73,10 +90,145 @@ class TestGitHubUrlParser(unittest.TestCase):
         self.assertIn("must contain both owner and repository name", str(ctx.exception).lower())
 
 
+class TestGitHubMetadataFetching(unittest.TestCase):
+    def _mock_response(self, data: dict):
+        response_bytes = json.dumps(data).encode("utf-8")
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = response_bytes
+        mock_resp.__enter__.return_value = mock_resp
+        return mock_resp
+
+    @patch("urllib.request.urlopen")
+    def test_fetch_github_metadata_success(self, mock_urlopen):
+        mock_urlopen.return_value = self._mock_response({
+            "name": "fastapi",
+            "full_name": "fastapi/fastapi",
+            "owner": {"login": "fastapi"},
+            "description": "FastAPI framework, high performance, easy to learn.",
+            "default_branch": "master",
+            "html_url": "https://github.com/fastapi/fastapi",
+        })
+
+        meta = fetch_github_metadata("https://github.com/fastapi/fastapi.git")
+        self.assertEqual(meta.owner, "fastapi")
+        self.assertEqual(meta.name, "fastapi")
+        self.assertEqual(meta.full_name, "fastapi/fastapi")
+        self.assertEqual(meta.description, "FastAPI framework, high performance, easy to learn.")
+        self.assertEqual(meta.default_branch, "master")
+        self.assertEqual(meta.url, "https://github.com/fastapi/fastapi")
+
+    def test_fetch_github_metadata_invalid_url(self):
+        with self.assertRaises(ValueError) as ctx:
+            fetch_github_metadata("https://bitbucket.org/owner/repo")
+        self.assertIn("only github repository urls", str(ctx.exception).lower())
+
+    @patch("urllib.request.urlopen")
+    def test_fetch_github_metadata_not_found(self, mock_urlopen):
+        err_fp = io.BytesIO(b"{}")
+        mock_urlopen.side_effect = urllib.error.HTTPError(
+            url="https://api.github.com/repos/owner/nonexistent",
+            code=404,
+            msg="Not Found",
+            hdrs={},
+            fp=err_fp,
+        )
+        with self.assertRaises(GitHubRepoNotFoundError) as ctx:
+            fetch_github_metadata("https://github.com/owner/nonexistent")
+        err_fp.close()
+        self.assertIn("not found or is private", str(ctx.exception).lower())
+
+    @patch("urllib.request.urlopen")
+    def test_fetch_github_metadata_rate_limit(self, mock_urlopen):
+        err_fp = io.BytesIO(b"{}")
+        mock_urlopen.side_effect = urllib.error.HTTPError(
+            url="https://api.github.com/repos/owner/repo",
+            code=403,
+            msg="rate limit exceeded",
+            hdrs={},
+            fp=err_fp,
+        )
+        with self.assertRaises(GitHubRateLimitError) as ctx:
+            fetch_github_metadata("https://github.com/owner/repo")
+        err_fp.close()
+        self.assertIn("rate limit exceeded", str(ctx.exception).lower())
+
+    @patch("urllib.request.urlopen")
+    def test_fetch_github_metadata_network_error(self, mock_urlopen):
+        mock_urlopen.side_effect = urllib.error.URLError("Connection refused")
+        with self.assertRaises(GitHubAPIError) as ctx:
+            fetch_github_metadata("https://github.com/owner/repo")
+        self.assertIn("failed to reach github api", str(ctx.exception).lower())
+
+
+class TestGitHubMetadataEndpoint(unittest.TestCase):
+    def _mock_response(self, data: dict):
+        response_bytes = json.dumps(data).encode("utf-8")
+        mock_resp = MagicMock()
+        mock_resp.read.return_value = response_bytes
+        mock_resp.__enter__.return_value = mock_resp
+        return mock_resp
+
+    @patch("urllib.request.urlopen")
+    def test_post_metadata_success(self, mock_urlopen):
+        mock_urlopen.return_value = self._mock_response({
+            "name": "codelens",
+            "full_name": "yashvatsdev/codelens",
+            "owner": {"login": "yashvatsdev"},
+            "description": "AI-Powered Code Intelligence Platform",
+            "default_branch": "main",
+            "html_url": "https://github.com/yashvatsdev/codelens",
+        })
+
+        payload = GitHubMetadataRequest(url="https://github.com/yashvatsdev/codelens")
+        result = get_github_repository_metadata(payload)
+
+        self.assertEqual(result.owner, "yashvatsdev")
+        self.assertEqual(result.name, "codelens")
+        self.assertEqual(result.description, "AI-Powered Code Intelligence Platform")
+        self.assertEqual(result.default_branch, "main")
+        self.assertEqual(result.url, "https://github.com/yashvatsdev/codelens")
+
+    def test_post_metadata_invalid_url_returns_400(self):
+        payload = GitHubMetadataRequest(url="https://not-github.org/bad/url")
+        with self.assertRaises(HTTPException) as ctx:
+            get_github_repository_metadata(payload)
+        self.assertEqual(ctx.exception.status_code, 400)
+
+    @patch("urllib.request.urlopen")
+    def test_post_metadata_not_found_returns_404(self, mock_urlopen):
+        err_fp = io.BytesIO(b"{}")
+        mock_urlopen.side_effect = urllib.error.HTTPError(
+            url="https://api.github.com/repos/unknown/project",
+            code=404,
+            msg="Not Found",
+            hdrs={},
+            fp=err_fp,
+        )
+        payload = GitHubMetadataRequest(url="https://github.com/unknown/project")
+        with self.assertRaises(HTTPException) as ctx:
+            get_github_repository_metadata(payload)
+        err_fp.close()
+        self.assertEqual(ctx.exception.status_code, 404)
+
+    @patch("urllib.request.urlopen")
+    def test_get_metadata_query_success(self, mock_urlopen):
+        mock_urlopen.return_value = self._mock_response({
+            "name": "react",
+            "full_name": "facebook/react",
+            "owner": {"login": "facebook"},
+            "description": "The library for web and native user interfaces.",
+            "default_branch": "main",
+            "html_url": "https://github.com/facebook/react",
+        })
+
+        result = get_github_repository_metadata_query("https://github.com/facebook/react")
+        self.assertEqual(result.name, "react")
+        self.assertEqual(result.owner, "facebook")
+
+
 class TestRepositoryDatabaseEndpoints(unittest.TestCase):
     def setUp(self):
         self.db = SessionLocal()
-        # Clean up any test repositories
         self._cleanup()
 
     def tearDown(self):
@@ -128,4 +280,3 @@ class TestRepositoryDatabaseEndpoints(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

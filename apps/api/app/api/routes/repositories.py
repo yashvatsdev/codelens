@@ -1,17 +1,83 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.db.database import get_db
 from app.models.repository import Repository
 from app.schemas.repository import (
+    GitHubMetadataRequest,
+    GitHubMetadataResponse,
     GitHubRepositoryCreate,
     RepositoryCreate,
     RepositoryResponse,
 )
-from app.services.github import parse_github_url
+from app.services.github import (
+    GitHubAPIError,
+    GitHubRateLimitError,
+    GitHubRepoNotFoundError,
+    fetch_github_metadata,
+    parse_github_url,
+)
 
 router = APIRouter(prefix="/repositories", tags=["repositories"])
+
+
+@router.post("/github/metadata", response_model=GitHubMetadataResponse)
+def get_github_repository_metadata(payload: GitHubMetadataRequest):
+    """Fetch public GitHub repository metadata from a GitHub repository URL."""
+    try:
+        metadata = fetch_github_metadata(payload.url)
+        return metadata
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    except GitHubRepoNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except GitHubRateLimitError as e:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=str(e),
+        )
+    except GitHubAPIError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(e),
+        )
+
+
+@router.get("/github/metadata", response_model=GitHubMetadataResponse)
+def get_github_repository_metadata_query(
+    url: str = Query(..., description="GitHub repository URL (e.g. https://github.com/owner/repo)")
+):
+    """Fetch public GitHub repository metadata using query parameter."""
+    try:
+        metadata = fetch_github_metadata(url)
+        return metadata
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    except GitHubRepoNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except GitHubRateLimitError as e:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=str(e),
+        )
+    except GitHubAPIError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(e),
+        )
 
 
 @router.post("/github", response_model=RepositoryResponse, status_code=status.HTTP_201_CREATED)
