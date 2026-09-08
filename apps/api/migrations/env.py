@@ -10,6 +10,7 @@ from app.db.database import Base
 
 # Import all models so Base.metadata is populated before autogenerate.
 import app.models.user  # noqa: F401
+import app.models.repository  # noqa: F401
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
