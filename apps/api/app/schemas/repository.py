@@ -68,5 +68,24 @@ class IngestionResponse(BaseModel):
     files_identified: int
     files_fetched: int
     files_skipped: int
+    files_stored: int = 0
     fetched_files: list[IngestionFileResponse] = []
     errors: list[str] = []
+
+
+class SourceFileResponse(BaseModel):
+    """Schema for a stored source file (content excluded by default)."""
+    id: int
+    repository_id: int
+    path: str
+    sha: str
+    size: int
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SourceFileDetailResponse(SourceFileResponse):
+    """Schema for a stored source file including content."""
+    content: str
+

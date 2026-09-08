@@ -233,11 +233,18 @@ class TestIngestEndpoint(unittest.TestCase):
         self.db.close()
 
     def _cleanup(self):
-        test_repos = self.db.query(Repository).filter(
+        from app.models.source_file import SourceFile as SF
+        # Delete source files first (FK constraint)
+        self.db.query(SF).filter(
+            SF.repository_id.in_(
+                self.db.query(Repository.id).filter(
+                    Repository.owner == "ingest-test-org"
+                )
+            )
+        ).delete(synchronize_session=False)
+        self.db.query(Repository).filter(
             Repository.owner == "ingest-test-org"
-        ).all()
-        for repo in test_repos:
-            self.db.delete(repo)
+        ).delete(synchronize_session=False)
         self.db.commit()
 
     def _create_repo(self) -> Repository:
@@ -268,6 +275,7 @@ class TestIngestEndpoint(unittest.TestCase):
             files_identified=3,
             files_fetched=3,
             files_skipped=0,
+            files_stored=3,
             fetched_files=[
                 IngestionFileEntry(path="main.py", sha="abc", size=100),
             ],
@@ -282,6 +290,8 @@ class TestIngestEndpoint(unittest.TestCase):
             owner="ingest-test-org",
             repo="test-repo",
             branch="main",
+            db=self.db,
+            repository_id=repo.id,
         )
 
     def test_ingest_endpoint_repo_not_found(self):
@@ -305,5 +315,222 @@ class TestIngestEndpoint(unittest.TestCase):
         self.assertEqual(ctx.exception.status_code, 404)
 
 
+# ---------------------------------------------------------------------------
+# Persistence tests: ingest_repository writes to DB
+# ---------------------------------------------------------------------------
+class TestIngestionPersistence(unittest.TestCase):
+    def setUp(self):
+        self.db = SessionLocal()
+        self._cleanup()
+
+    def tearDown(self):
+        self._cleanup()
+        self.db.close()
+
+    def _cleanup(self):
+        from app.models.source_file import SourceFile as SF
+        self.db.query(SF).filter(
+            SF.repository_id.in_(
+                self.db.query(Repository.id).filter(
+                    Repository.owner == "persist-test-org"
+                )
+            )
+        ).delete(synchronize_session=False)
+        self.db.query(Repository).filter(
+            Repository.owner == "persist-test-org"
+        ).delete(synchronize_session=False)
+        self.db.commit()
+
+    def _create_repo(self) -> Repository:
+        repo = Repository(
+            github_id="persist-test-org/persist-repo",
+            name="persist-repo",
+            full_name="persist-test-org/persist-repo",
+            owner="persist-test-org",
+            url="https://github.com/persist-test-org/persist-repo",
+            default_branch="main",
+        )
+        self.db.add(repo)
+        self.db.commit()
+        self.db.refresh(repo)
+        return repo
+
+    @patch("app.services.ingestion.fetch_file_content")
+    @patch("app.services.ingestion.fetch_repo_tree")
+    def test_ingest_persists_files_to_db(self, mock_tree, mock_content):
+        from app.models.source_file import SourceFile as SF
+
+        repo = self._create_repo()
+        mock_tree.return_value = [
+            GitHubTreeEntry(path="app.py", type="blob", sha="s1", size=100),
+            GitHubTreeEntry(path="utils.ts", type="blob", sha="s2", size=200),
+        ]
+        mock_content.side_effect = [
+            GitHubFileContent(path="app.py", sha="s1", content="print(1)", size=100),
+            GitHubFileContent(path="utils.ts", sha="s2", content="export {}", size=200),
+        ]
+
+        result = ingest_repository(
+            "persist-test-org", "persist-repo", "main",
+            db=self.db, repository_id=repo.id,
+        )
+
+        self.assertEqual(result.files_stored, 2)
+
+        # Verify rows in DB
+        stored = self.db.query(SF).filter(SF.repository_id == repo.id).all()
+        self.assertEqual(len(stored), 2)
+        paths = sorted(f.path for f in stored)
+        self.assertEqual(paths, ["app.py", "utils.ts"])
+        # Verify content is stored
+        app_file = next(f for f in stored if f.path == "app.py")
+        self.assertEqual(app_file.content, "print(1)")
+        self.assertEqual(app_file.sha, "s1")
+
+    @patch("app.services.ingestion.fetch_file_content")
+    @patch("app.services.ingestion.fetch_repo_tree")
+    def test_reingest_replaces_existing_files(self, mock_tree, mock_content):
+        from app.models.source_file import SourceFile as SF
+
+        repo = self._create_repo()
+
+        # First ingest
+        mock_tree.return_value = [
+            GitHubTreeEntry(path="old.py", type="blob", sha="o1", size=50),
+        ]
+        mock_content.return_value = GitHubFileContent(
+            path="old.py", sha="o1", content="old", size=50,
+        )
+        ingest_repository(
+            "persist-test-org", "persist-repo", "main",
+            db=self.db, repository_id=repo.id,
+        )
+        self.assertEqual(self.db.query(SF).filter(SF.repository_id == repo.id).count(), 1)
+
+        # Second ingest with different file
+        mock_tree.return_value = [
+            GitHubTreeEntry(path="new.py", type="blob", sha="n1", size=60),
+        ]
+        mock_content.return_value = GitHubFileContent(
+            path="new.py", sha="n1", content="new", size=60,
+        )
+        result = ingest_repository(
+            "persist-test-org", "persist-repo", "main",
+            db=self.db, repository_id=repo.id,
+        )
+
+        self.assertEqual(result.files_stored, 1)
+        stored = self.db.query(SF).filter(SF.repository_id == repo.id).all()
+        self.assertEqual(len(stored), 1)
+        self.assertEqual(stored[0].path, "new.py")
+
+    @patch("app.services.ingestion.fetch_file_content")
+    @patch("app.services.ingestion.fetch_repo_tree")
+    def test_ingest_without_db_does_not_persist(self, mock_tree, mock_content):
+        mock_tree.return_value = [
+            GitHubTreeEntry(path="x.py", type="blob", sha="x1", size=10),
+        ]
+        mock_content.return_value = GitHubFileContent(
+            path="x.py", sha="x1", content="pass", size=10,
+        )
+
+        result = ingest_repository("owner", "repo", "main")
+
+        self.assertEqual(result.files_fetched, 1)
+        self.assertEqual(result.files_stored, 0)
+
+
+# ---------------------------------------------------------------------------
+# GET /repositories/{id}/files endpoint tests
+# ---------------------------------------------------------------------------
+class TestGetRepositoryFiles(unittest.TestCase):
+    def setUp(self):
+        self.db = SessionLocal()
+        self._cleanup()
+
+    def tearDown(self):
+        self._cleanup()
+        self.db.close()
+
+    def _cleanup(self):
+        from app.models.source_file import SourceFile as SF
+        self.db.query(SF).filter(
+            SF.repository_id.in_(
+                self.db.query(Repository.id).filter(
+                    Repository.owner == "files-test-org"
+                )
+            )
+        ).delete(synchronize_session=False)
+        self.db.query(Repository).filter(
+            Repository.owner == "files-test-org"
+        ).delete(synchronize_session=False)
+        self.db.commit()
+
+    def _create_repo_with_files(self):
+        from app.models.source_file import SourceFile as SF
+
+        repo = Repository(
+            github_id="files-test-org/files-repo",
+            name="files-repo",
+            full_name="files-test-org/files-repo",
+            owner="files-test-org",
+            url="https://github.com/files-test-org/files-repo",
+            default_branch="main",
+        )
+        self.db.add(repo)
+        self.db.commit()
+        self.db.refresh(repo)
+
+        for i, name in enumerate(["main.py", "utils.py", "config.yaml"]):
+            sf = SF(
+                repository_id=repo.id,
+                path=name,
+                sha=f"sha{i}",
+                content=f"content-{name}",
+                size=100 + i,
+            )
+            self.db.add(sf)
+        self.db.commit()
+        return repo
+
+    def test_get_files_returns_stored_files(self):
+        from app.api.routes.repositories import get_repository_files
+
+        repo = self._create_repo_with_files()
+        files = get_repository_files(repo.id, db=self.db)
+
+        self.assertEqual(len(files), 3)
+        paths = [f.path for f in files]
+        # Should be ordered by path
+        self.assertEqual(paths, ["config.yaml", "main.py", "utils.py"])
+
+    def test_get_files_empty_repo(self):
+        from app.api.routes.repositories import get_repository_files
+
+        repo = Repository(
+            github_id="files-test-org/empty-repo",
+            name="empty-repo",
+            full_name="files-test-org/empty-repo",
+            owner="files-test-org",
+            url="https://github.com/files-test-org/empty-repo",
+            default_branch="main",
+        )
+        self.db.add(repo)
+        self.db.commit()
+        self.db.refresh(repo)
+
+        files = get_repository_files(repo.id, db=self.db)
+        self.assertEqual(len(files), 0)
+
+    def test_get_files_repo_not_found(self):
+        from fastapi import HTTPException
+        from app.api.routes.repositories import get_repository_files
+
+        with self.assertRaises(HTTPException) as ctx:
+            get_repository_files(999999, db=self.db)
+        self.assertEqual(ctx.exception.status_code, 404)
+
+
 if __name__ == "__main__":
     unittest.main()
+

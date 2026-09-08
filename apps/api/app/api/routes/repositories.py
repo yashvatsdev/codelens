@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.db.database import get_db
 from app.models.repository import Repository
+from app.models.source_file import SourceFile
 from app.schemas.repository import (
     GitHubMetadataRequest,
     GitHubMetadataResponse,
@@ -11,6 +12,7 @@ from app.schemas.repository import (
     IngestionResponse,
     RepositoryCreate,
     RepositoryResponse,
+    SourceFileResponse,
 )
 from app.services.github import (
     GitHubAPIError,
@@ -224,6 +226,8 @@ def ingest_repository_endpoint(
             owner=repository.owner,
             repo=repository.name,
             branch=repository.default_branch,
+            db=db,
+            repository_id=repository.id,
         )
     except GitHubRepoNotFoundError as e:
         raise HTTPException(
@@ -242,6 +246,27 @@ def ingest_repository_endpoint(
         )
 
     return result
+
+
+@router.get("/{repository_id}/files", response_model=list[SourceFileResponse])
+def get_repository_files(
+    repository_id: int,
+    db: Session = Depends(get_db),
+):
+    """Retrieve stored source files for a repository (metadata only, no content)."""
+    repository = db.get(Repository, repository_id)
+    if not repository:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Repository with id {repository_id} not found",
+        )
+
+    files = db.execute(
+        select(SourceFile)
+        .where(SourceFile.repository_id == repository_id)
+        .order_by(SourceFile.path)
+    ).scalars().all()
+    return files
 
 
 @router.delete("/{repository_id}")

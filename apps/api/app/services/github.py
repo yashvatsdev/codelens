@@ -1,8 +1,9 @@
+import base64
 import json
 import re
 import urllib.error
 import urllib.request
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from urllib.parse import urlparse
 
 
@@ -284,7 +285,6 @@ def fetch_file_content(
     api_url = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}"
     payload = _github_api_request(api_url, timeout=timeout)
 
-    import base64
     raw_content = payload.get("content", "")
     try:
         decoded = base64.b64decode(raw_content).decode("utf-8", errors="replace")
