@@ -3,7 +3,6 @@ import re
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
-from dataclasses import dataclass
 from urllib.parse import urlparse
 
 
@@ -209,56 +208,14 @@ def parse_github_url(raw_url: str) -> ParsedGitHubRepo:
 
 def fetch_github_metadata(raw_url: str, timeout: int = 10) -> GitHubRepoMetadata:
     """Fetch public repository metadata from GitHub API for a given repository URL."""
-    """Fetch public repository metadata from GitHub API for a given repository URL.
-
-    Extracts:
-      - owner (str)
-      - repository name (str)
-      - description (str | None)
-      - default_branch (str)
-      - url (str)
-
-    Raises:
-      - ValueError: If the provided URL is invalid.
-      - GitHubRepoNotFoundError: If repository is not found or private (HTTP 404).
-      - GitHubRateLimitError: If GitHub API rate limits are reached (HTTP 403).
-      - GitHubAPIError: On any other GitHub or network connection error.
-    """
     parsed = parse_github_url(raw_url)
-
     api_url = f"https://api.github.com/repos/{parsed.owner}/{parsed.name}"
-    payload = _github_api_request(api_url, timeout=timeout)
-    req = urllib.request.Request(
-        api_url,
-        headers={
-            "User-Agent": "CodeLens-App",
-            "Accept": "application/vnd.github+json",
-        },
-    )
-
     try:
-        with urllib.request.urlopen(req, timeout=timeout) as response:
-            payload = json.loads(response.read().decode("utf-8"))
-    except urllib.error.HTTPError as err:
-        if err.code == 404:
-            raise GitHubRepoNotFoundError(
-                f"GitHub repository '{parsed.full_name}' was not found or is private."
-            ) from err
-        if err.code == 403:
-            raise GitHubRateLimitError(
-                "GitHub API rate limit exceeded. Please try again later."
-            ) from err
-        raise GitHubAPIError(
-            f"GitHub API returned error {err.code}: {err.reason}"
-        ) from err
-    except urllib.error.URLError as err:
-        raise GitHubAPIError(
-            f"Failed to reach GitHub API: {err.reason}"
-        ) from err
-    except TimeoutError as err:
-        raise GitHubAPIError(
-            "Request to GitHub API timed out."
-        ) from err
+        payload = _github_api_request(api_url, timeout=timeout)
+    except GitHubRepoNotFoundError:
+        raise GitHubRepoNotFoundError(
+            f"GitHub repository '{parsed.full_name}' was not found or is private."
+        )
 
     owner = payload.get("owner", {}).get("login") or parsed.owner
     name = payload.get("name") or parsed.name
