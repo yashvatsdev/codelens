@@ -37,8 +37,12 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PRReviewsContent } from "@/components/pr-reviews-content";
-import { api, ApiError } from "@/lib/api";
-import { api, ApiError, getFriendlyErrorMessage, type FriendlyError } from "@/lib/api";
+import {
+  api,
+  ApiError,
+  getFriendlyErrorMessage,
+  type FriendlyError,
+} from "@/lib/api";
 import { calculateHealthScore, getHealthColor } from "@/lib/health";
 import type {
   AnalysisSummaryResponse,
@@ -181,14 +185,19 @@ export function CodeLensDashboard() {
   // GitHub branch & PR states for selected finding fix
   const [isConfirmingGitHubApply, setIsConfirmingGitHubApply] = useState(false);
   const [isApplyingToGitHub, setIsApplyingToGitHub] = useState(false);
-  const [gitHubApplyResult, setGitHubApplyResult] = useState<ApplyFixBranchResponse | null>(null);
-  const [gitHubApplyError, setGitHubApplyError] = useState<FriendlyError | null>(null);
+  const [gitHubApplyResult, setGitHubApplyResult] =
+    useState<ApplyFixBranchResponse | null>(null);
+  const [gitHubApplyError, setGitHubApplyError] =
+    useState<FriendlyError | null>(null);
   const [isConfirmingCreatePR, setIsConfirmingCreatePR] = useState(false);
   const [prTitleInput, setPrTitleInput] = useState("");
   const [prBodyInput, setPrBodyInput] = useState("");
   const [isCreatingPR, setIsCreatingPR] = useState(false);
-  const [createPRResult, setCreatePRResult] = useState<CreatePRFromBranchResponse | null>(null);
-  const [createPRError, setCreatePRError] = useState<FriendlyError | null>(null);
+  const [createPRResult, setCreatePRResult] =
+    useState<CreatePRFromBranchResponse | null>(null);
+  const [createPRError, setCreatePRError] = useState<FriendlyError | null>(
+    null,
+  );
 
   // AI Test state for selected finding
   const [isGeneratingTest, setIsGeneratingTest] = useState(false);
@@ -397,7 +406,9 @@ export function CodeLensDashboard() {
         prBodyInput.trim() || undefined,
       );
       setCreatePRResult(res);
-      setNotice(`Pull Request #${res.pull_request_number} created successfully.`);
+      setNotice(
+        `Pull Request #${res.pull_request_number} created successfully.`,
+      );
       if (res.pull_request_url) {
         window.open(res.pull_request_url, "_blank", "noopener,noreferrer");
       }
@@ -1199,19 +1210,21 @@ export function CodeLensDashboard() {
                         <GitBranch className="size-3.5 text-cyan-400" />
                         <span>GitHub Integration</span>
                       </div>
-                      {!gitHubApplyResult && !isApplyingToGitHub && !isConfirmingGitHubApply && (
-                        <Button
-                          size="xs"
-                          onClick={() => {
-                            setIsConfirmingGitHubApply(true);
-                            setGitHubApplyError(null);
-                          }}
-                          className="h-6 text-[11px] bg-cyan-300 text-black hover:bg-cyan-200 font-medium"
-                        >
-                          <GitBranch className="size-3 mr-1" />
-                          Apply Fix to GitHub
-                        </Button>
-                      )}
+                      {!gitHubApplyResult &&
+                        !isApplyingToGitHub &&
+                        !isConfirmingGitHubApply && (
+                          <Button
+                            size="xs"
+                            onClick={() => {
+                              setIsConfirmingGitHubApply(true);
+                              setGitHubApplyError(null);
+                            }}
+                            className="h-6 text-[11px] bg-cyan-300 text-black hover:bg-cyan-200 font-medium"
+                          >
+                            <GitBranch className="size-3 mr-1" />
+                            Apply Fix to GitHub
+                          </Button>
+                        )}
                     </div>
 
                     {/* Step 3: Confirmation before executing GitHub Apply */}
@@ -1224,7 +1237,9 @@ export function CodeLensDashboard() {
                               Apply this AI-generated fix to GitHub?
                             </div>
                             <div className="text-[11px] text-zinc-400 mt-0.5 leading-relaxed">
-                              This will create a new GitHub branch and commit the proposed fix. Your default branch will not be modified.
+                              This will create a new GitHub branch and commit
+                              the proposed fix. Your default branch will not be
+                              modified.
                             </div>
                           </div>
                         </div>
@@ -1268,7 +1283,9 @@ export function CodeLensDashboard() {
                       >
                         <AlertCircle
                           className={`size-4 shrink-0 mt-0.5 ${
-                            gitHubApplyError.isQuota ? "text-amber-400" : "text-rose-400"
+                            gitHubApplyError.isQuota
+                              ? "text-amber-400"
+                              : "text-rose-400"
                           }`}
                         />
                         <div className="space-y-0.5">
@@ -1308,7 +1325,9 @@ export function CodeLensDashboard() {
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 font-mono text-[11px] bg-black/40 p-2.5 rounded border border-white/[0.06]">
                           <div>
                             <span className="text-zinc-500">Branch: </span>
-                            <span className="text-zinc-200">{gitHubApplyResult.branch_name}</span>
+                            <span className="text-zinc-200">
+                              {gitHubApplyResult.branch_name}
+                            </span>
                           </div>
                           <div>
                             <span className="text-zinc-500">Commit: </span>
@@ -1319,27 +1338,29 @@ export function CodeLensDashboard() {
                         </div>
 
                         {/* Step 4 -> 5: Button to initiate Pull Request */}
-                        {!createPRResult && !isConfirmingCreatePR && !isCreatingPR && (
-                          <div className="pt-1 flex justify-end">
-                            <Button
-                              size="sm"
-                              onClick={() => {
-                                setIsConfirmingCreatePR(true);
-                                setPrTitleInput(
-                                  `fix: resolve ${selectedFinding?.rule_id || 'issue'} in ${selectedFinding?.file_path || 'file'}`
-                                );
-                                setPrBodyInput(
-                                  `## 🔍 CodeLens AI Proposed Fix\n\nThis Pull Request proposes an automated code fix for finding **\`${selectedFinding?.rule_id || ''}\`**.\n\n- **File:** \`${selectedFinding?.file_path || 'unknown'}\`\n- **Severity:** \`${selectedFinding?.severity?.toUpperCase() || ''}\`\n- **Issue:** ${selectedFinding?.message || ''}\n- **Branch:** \`${gitHubApplyResult.branch_name}\`\n\n---\n*Created automatically by CodeLens*`
-                                );
-                                setCreatePRError(null);
-                              }}
-                              className="h-7 text-xs bg-cyan-300 text-black hover:bg-cyan-200 font-medium"
-                            >
-                              <GitPullRequest className="size-3.5 mr-1.5" />
-                              Create Pull Request
-                            </Button>
-                          </div>
-                        )}
+                        {!createPRResult &&
+                          !isConfirmingCreatePR &&
+                          !isCreatingPR && (
+                            <div className="pt-1 flex justify-end">
+                              <Button
+                                size="sm"
+                                onClick={() => {
+                                  setIsConfirmingCreatePR(true);
+                                  setPrTitleInput(
+                                    `fix: resolve ${selectedFinding?.rule_id || "issue"} in ${selectedFinding?.file_path || "file"}`,
+                                  );
+                                  setPrBodyInput(
+                                    `## 🔍 CodeLens AI Proposed Fix\n\nThis Pull Request proposes an automated code fix for finding **\`${selectedFinding?.rule_id || ""}\`**.\n\n- **File:** \`${selectedFinding?.file_path || "unknown"}\`\n- **Severity:** \`${selectedFinding?.severity?.toUpperCase() || ""}\`\n- **Issue:** ${selectedFinding?.message || ""}\n- **Branch:** \`${gitHubApplyResult.branch_name}\`\n\n---\n*Created automatically by CodeLens*`,
+                                  );
+                                  setCreatePRError(null);
+                                }}
+                                className="h-7 text-xs bg-cyan-300 text-black hover:bg-cyan-200 font-medium"
+                              >
+                                <GitPullRequest className="size-3.5 mr-1.5" />
+                                Create Pull Request
+                              </Button>
+                            </div>
+                          )}
                       </div>
                     )}
 
@@ -1417,7 +1438,9 @@ export function CodeLensDashboard() {
                       >
                         <AlertCircle
                           className={`size-4 shrink-0 mt-0.5 ${
-                            createPRError.isQuota ? "text-amber-400" : "text-rose-400"
+                            createPRError.isQuota
+                              ? "text-amber-400"
+                              : "text-rose-400"
                           }`}
                         />
                         <div className="space-y-0.5">
@@ -1449,15 +1472,21 @@ export function CodeLensDashboard() {
                         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 font-mono text-[11px] bg-black/40 p-2.5 rounded border border-white/[0.06]">
                           <div>
                             <span className="text-zinc-500">PR: </span>
-                            <span className="text-zinc-200">#{createPRResult.pull_request_number}</span>
+                            <span className="text-zinc-200">
+                              #{createPRResult.pull_request_number}
+                            </span>
                           </div>
                           <div>
                             <span className="text-zinc-500">Branch: </span>
-                            <span className="text-zinc-200">{createPRResult.branch_name}</span>
+                            <span className="text-zinc-200">
+                              {createPRResult.branch_name}
+                            </span>
                           </div>
                           <div>
                             <span className="text-zinc-500">Base: </span>
-                            <span className="text-zinc-200">{createPRResult.base_branch}</span>
+                            <span className="text-zinc-200">
+                              {createPRResult.base_branch}
+                            </span>
                           </div>
                         </div>
 
@@ -1468,7 +1497,7 @@ export function CodeLensDashboard() {
                               window.open(
                                 createPRResult.pull_request_url,
                                 "_blank",
-                                "noopener,noreferrer"
+                                "noopener,noreferrer",
                               )
                             }
                             className="h-7 text-xs bg-emerald-500 text-black hover:bg-emerald-400 font-medium"

@@ -61,7 +61,9 @@ export function getFriendlyErrorMessage(
     if (err.status === 404) {
       return {
         title: "Not found",
-        message: cleaned || "The requested resource, repository, or branch was not found.",
+        message:
+          cleaned ||
+          "The requested resource, repository, or branch was not found.",
         isQuota: false,
       };
     }
@@ -79,10 +81,9 @@ export function getFriendlyErrorMessage(
         rawMsg.toLowerCase().includes("github") ||
         rawMsg.toLowerCase().includes("rate limit");
       return {
-        title: "AI quota temporarily exhausted",
-        message:
-          "CodeLens has reached its current AI usage limit. Static analysis is still available. Please try again later.",
-        title: isGitHubRateLimit ? "Rate limit exceeded" : "AI quota temporarily exhausted",
+        title: isGitHubRateLimit
+          ? "Rate limit exceeded"
+          : "AI quota temporarily exhausted",
         message: isGitHubRateLimit
           ? "GitHub API rate limit exceeded. Please try again later."
           : "CodeLens has reached its current AI usage limit. Static analysis is still available. Please try again later.",
@@ -93,9 +94,6 @@ export function getFriendlyErrorMessage(
     if (err.status === 502 || err.status === 503) {
       const isGitHub = rawMsg.toLowerCase().includes("github");
       return {
-        title: "AI service unavailable",
-        message:
-          "AI service is currently unavailable. Static analysis is still available. Please try again later.",
         title: isGitHub ? "GitHub unavailable" : "Service unavailable",
         message: isGitHub
           ? "GitHub service is temporarily unavailable. Please check your GitHub token or try again later."
@@ -103,10 +101,6 @@ export function getFriendlyErrorMessage(
         isQuota: false,
       };
     }
-
-    const cleaned = (rawMsg || defaultMessage)
-      .replace(/gemini/gi, "AI")
-      .replace(/google/gi, "AI");
 
     return {
       message: cleaned,
@@ -117,7 +111,6 @@ export function getFriendlyErrorMessage(
   if (err instanceof Error) {
     const cleaned = err.message
       .replace(/gemini/gi, "AI")
-      .replace(/google/gi, "AI");
       .replace(/google/gi, "AI")
       .replace(/bearer\s+[a-zA-Z0-9_\-]+/gi, "[REDACTED]")
       .replace(/token\s+[a-zA-Z0-9_\-]+/gi, "[REDACTED]");
