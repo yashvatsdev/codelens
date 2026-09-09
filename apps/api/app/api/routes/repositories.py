@@ -2,11 +2,16 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.db.database import get_db
 from app.models.finding import Finding
 from app.models.repository import Repository
 from app.models.source_file import SourceFile
-from app.schemas.finding import AnalysisSummaryResponse, FindingResponse
+from app.schemas.finding import (
+    AnalysisSummaryResponse,
+    FindingExplanationResponse,
+    FindingResponse,
+)
 from app.schemas.repository import (
     GitHubMetadataRequest,
     GitHubMetadataResponse,
@@ -24,6 +29,13 @@ from app.services.github import (
     GitHubServiceError,
     fetch_github_metadata,
     parse_github_url,
+)
+from app.services.explainer import (
+    ExplainerError,
+    FindingNotFoundError,
+    GeminiNotConfiguredError,
+    SourceFileNotFoundError,
+    explain_finding,
 )
 from app.services.ingestion import ingest_repository
 
@@ -327,3 +339,62 @@ def delete_repository(
         "status": "ok",
         "message": f"Repository {repository_id} deleted successfully",
     }
+
+
+@router.post(
+    "/{repository_id}/findings/{finding_id}/explain",
+    response_model=FindingExplanationResponse,
+)
+def explain_repository_finding(
+    repository_id: int,
+    finding_id: int,
+    db: Session = Depends(get_db),
+):
+    """Generate an AI-powered explanation and remediation for a finding using Google Gemini."""
+    repository = db.get(Repository, repository_id)
+    if not repository:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Repository with id {repository_id} not found",
+        )
+
+    finding = db.get(Finding, finding_id)
+    if not finding or finding.repository_id != repository_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Finding with id {finding_id} not found for repository {repository_id}",
+        )
+
+    if not settings.gemini_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Gemini API is not configured (missing GEMINI_API_KEY)",
+        )
+
+    try:
+        return explain_finding(
+            repository=repository,
+            finding=finding,
+            db=db,
+        )
+    except FindingNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except SourceFileNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except GeminiNotConfiguredError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(e),
+        )
+    except ExplainerError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(e),
+        )
+

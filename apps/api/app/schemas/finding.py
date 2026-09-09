@@ -31,3 +31,10 @@ class AnalysisSummaryResponse(BaseModel):
     findings: list[FindingResponse] = []
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class FindingExplanationResponse(BaseModel):
+    finding_id: int
+    explanation: str
+    remediation: str | None = None
+
