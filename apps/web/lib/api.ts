@@ -1,4 +1,5 @@
 import type {
+  AIPRReviewResponse,
   AnalysisSummaryResponse,
   FindingExplanationResponse,
   FindingFixResponse,
@@ -113,6 +114,13 @@ export const api = {
   generateTest: (repositoryId: number, findingId: number) =>
     request<FindingTestResponse>(
       `/repositories/${repositoryId}/findings/${findingId}/test`,
+      {
+        method: "POST",
+      },
+    ),
+  aiReviewPullRequest: (repositoryId: number, pullRequestNumber: number) =>
+    request<AIPRReviewResponse>(
+      `/repositories/${repositoryId}/pull-requests/${pullRequestNumber}/ai-review`,
       {
         method: "POST",
       },

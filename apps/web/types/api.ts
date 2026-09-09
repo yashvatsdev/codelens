@@ -99,3 +99,20 @@ export interface FindingTestResponse {
   explanation: string;
 }
 
+export interface AIPRKeyFinding {
+  file_path: string;
+  line_number: number | null;
+  severity: "error" | "warning" | "info" | string;
+  category: string;
+  issue: string;
+  impact: string;
+  recommendation: string;
+}
+
+export interface AIPRReviewResponse {
+  summary: string;
+  risk_level: "low" | "medium" | "high" | "critical" | string;
+  overall_assessment: string;
+  key_findings: AIPRKeyFinding[];
+  recommendations: string[];
+}

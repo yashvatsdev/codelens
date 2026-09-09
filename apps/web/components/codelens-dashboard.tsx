@@ -17,6 +17,7 @@ import {
   Filter,
   FolderGit2,
   GitBranch,
+  GitPullRequest,
   Info,
   LayoutDashboard,
   Loader2,
@@ -34,6 +35,7 @@ import {
   Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { PRReviewsContent } from "@/components/pr-reviews-content";
 import { api, ApiError } from "@/lib/api";
 import { calculateHealthScore, getHealthColor } from "@/lib/health";
 import type {
@@ -53,6 +55,7 @@ type Section =
   | "Repositories"
   | "Findings"
   | "Analysis"
+  | "PR Reviews"
   | "Settings";
 
 interface RepoDetails extends RepositoryResponse {
@@ -129,6 +132,7 @@ const navItems = [
   { label: "Repositories", icon: GitBranch },
   { label: "Findings", icon: ShieldCheck },
   { label: "Analysis", icon: BarChart3 },
+  { label: "PR Reviews", icon: GitPullRequest },
 ];
 
 export function CodeLensDashboard() {
@@ -630,6 +634,9 @@ export function CodeLensDashboard() {
                   onAnalyze={handleAnalyze}
                   analyzingRepoId={analyzingRepoId}
                 />
+              )}
+              {active === "PR Reviews" && (
+                <PRReviewsContent repositories={repositories} />
               )}
               {active === "Settings" && (
                 <SettingsContent backendHealthy={backendHealthy} />
