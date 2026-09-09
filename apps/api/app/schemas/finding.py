@@ -38,3 +38,12 @@ class FindingExplanationResponse(BaseModel):
     explanation: str
     remediation: str | None = None
 
+
+class FindingFixResponse(BaseModel):
+    finding_id: int
+    explanation: str
+    original_code: str
+    fixed_code: str
+    diff: str | None = None
+
+

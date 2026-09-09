@@ -3,6 +3,7 @@ from app.schemas.finding import (
     FindingBase,
     FindingCreate,
     FindingExplanationResponse,
+    FindingFixResponse,
     FindingResponse,
 )
 from app.schemas.repository import (
@@ -23,6 +24,7 @@ __all__ = [
     "FindingBase",
     "FindingCreate",
     "FindingExplanationResponse",
+    "FindingFixResponse",
     "FindingResponse",
     "GitHubMetadataRequest",
     "GitHubMetadataResponse",

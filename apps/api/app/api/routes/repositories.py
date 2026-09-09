@@ -10,6 +10,7 @@ from app.models.source_file import SourceFile
 from app.schemas.finding import (
     AnalysisSummaryResponse,
     FindingExplanationResponse,
+    FindingFixResponse,
     FindingResponse,
 )
 from app.schemas.repository import (
@@ -36,6 +37,10 @@ from app.services.explainer import (
     GeminiNotConfiguredError,
     SourceFileNotFoundError,
     explain_finding,
+)
+from app.services.fixer import (
+    FixerError,
+    generate_fix,
 )
 from app.services.ingestion import ingest_repository
 
@@ -397,4 +402,69 @@ def explain_repository_finding(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=str(e),
         )
+
+
+@router.post(
+    "/{repository_id}/findings/{finding_id}/fix",
+    response_model=FindingFixResponse,
+)
+def fix_repository_finding_endpoint(
+    repository_id: int,
+    finding_id: int,
+    db: Session = Depends(get_db),
+):
+    """Generate an AI-powered code fix for a finding using Google Gemini.
+
+    This endpoint does not modify source files or repositories in GitHub or the database.
+    """
+    repository = db.get(Repository, repository_id)
+    if not repository:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Repository with id {repository_id} not found",
+        )
+
+    finding = db.get(Finding, finding_id)
+    if not finding or finding.repository_id != repository_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Finding with id {finding_id} not found for repository {repository_id}",
+        )
+
+    if not settings.gemini_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Gemini API is not configured (missing GEMINI_API_KEY)",
+        )
+
+    if not finding.file_path:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Finding {finding_id} does not specify a file path",
+        )
+
+    source_file = db.execute(
+        select(SourceFile).where(
+            SourceFile.repository_id == repository.id,
+            SourceFile.path == finding.file_path,
+        )
+    ).scalar_one_or_none()
+
+    if not source_file:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Source file '{finding.file_path}' not found for repository {repository_id}",
+        )
+
+    try:
+        return generate_fix(
+            finding=finding,
+            source_content=source_file.content,
+        )
+    except FixerError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(e),
+        )
+
 
