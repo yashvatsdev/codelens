@@ -30,15 +30,23 @@ from app.main import app
 from app.models.finding import Finding
 from app.models.repository import Repository
 from app.models.source_file import SourceFile
-from app.schemas.finding import ApplyFixBranchResponse, FindingFixResponse
+from app.schemas.finding import (
+    ApplyFixBranchResponse,
+    CreatePRFromBranchRequest,
+    CreatePRFromBranchResponse,
+    FindingFixResponse,
+)
 from app.services.branch_fixer import (
     BranchCommitFailedError,
     BranchFixerError,
+    BranchNotFoundError,
     GitHubCredentialsUnavailableError,
+    PullRequestAlreadyExistsError,
     UnchangedFixError,
     apply_ai_fix_to_github_branch,
     commit_file_to_branch,
     create_git_branch,
+    create_pr_from_fix_branch,
     get_branch_head_sha,
     get_file_sha_on_branch,
     get_repository_default_branch,
@@ -618,3 +626,315 @@ class TestApplyFixBranchEndpoint(unittest.TestCase):
         path = "/repositories/{repository_id}/findings/{finding_id}/apply-fix"
         self.assertIn(path, openapi["paths"])
         self.assertIn("post", openapi["paths"][path])
+
+
+class TestCreatePRFromBranchEndpoint(unittest.TestCase):
+    """Integration tests for POST /repositories/{id}/findings/{id}/create-pr."""
+
+    def setUp(self):
+        self.client = TestClient(app)
+        self.db = SessionLocal()
+        self._cleanup()
+        self.repo = self._create_repo("test-pr-create-repo")
+        self.source_file = self._create_source_file(
+            self.repo.id,
+            "app.py",
+            "x = 1\n",
+        )
+        self.finding = self._create_finding(self.repo.id, "app.py", line_number=1)
+
+    def tearDown(self):
+        self._cleanup()
+        self.db.close()
+
+    def _cleanup(self):
+        self.db.query(Finding).filter(
+            Finding.repository_id.in_(
+                self.db.query(Repository.id).filter(
+                    Repository.owner == "test-pr-create-org"
+                )
+            )
+        ).delete(synchronize_session=False)
+        self.db.query(SourceFile).filter(
+            SourceFile.repository_id.in_(
+                self.db.query(Repository.id).filter(
+                    Repository.owner == "test-pr-create-org"
+                )
+            )
+        ).delete(synchronize_session=False)
+        self.db.query(Repository).filter(
+            Repository.owner == "test-pr-create-org"
+        ).delete(synchronize_session=False)
+        self.db.commit()
+
+    def _create_repo(self, name: str) -> Repository:
+        repo = Repository(
+            github_id=f"test-pr-create-org/{name}",
+            name=name,
+            full_name=f"test-pr-create-org/{name}",
+            owner="test-pr-create-org",
+            url=f"https://github.com/test-pr-create-org/{name}",
+            default_branch="main",
+        )
+        self.db.add(repo)
+        self.db.commit()
+        self.db.refresh(repo)
+        return repo
+
+    def _create_source_file(self, repo_id: int, path: str, content: str) -> SourceFile:
+        sf = SourceFile(
+            repository_id=repo_id,
+            path=path,
+            sha="sha-app-py",
+            content=content,
+            size=len(content),
+        )
+        self.db.add(sf)
+        self.db.commit()
+        self.db.refresh(sf)
+        return sf
+
+    def _create_finding(self, repo_id: int, file_path: str, line_number: int) -> Finding:
+        finding = Finding(
+            repository_id=repo_id,
+            file_path=file_path,
+            line_number=line_number,
+            rule_id="SEC-001",
+            severity="error",
+            category="security",
+            message="Avoid eval",
+        )
+        self.db.add(finding)
+        self.db.commit()
+        self.db.refresh(finding)
+        return finding
+
+    def test_create_pr_success_with_defaults(self):
+        """Creates a Pull Request with default title and body."""
+        posted_payload = None
+
+        def fake_gh_req(url, method="GET", data=None, token=None, timeout=15):
+            nonlocal posted_payload
+            if "git/ref/heads/codelens/fix/finding-1-abc" in url:
+                return {"object": {"sha": "branch-head-sha"}}
+            if url.endswith("/repos/test-pr-create-org/test-pr-create-repo"):
+                return {"default_branch": "main"}
+            if url.endswith("/repos/test-pr-create-org/test-pr-create-repo/pulls") and method == "POST":
+                posted_payload = data
+                return {
+                    "number": 42,
+                    "html_url": "https://github.com/test-pr-create-org/test-pr-create-repo/pull/42",
+                    "title": data.get("title"),
+                    "state": "open",
+                }
+            return {}
+
+        with patch.object(settings, "github_token", "mock-token"), \
+             patch("app.services.branch_fixer._authenticated_github_request", side_effect=fake_gh_req):
+            response = self.client.post(
+                f"/repositories/{self.repo.id}/findings/{self.finding.id}/create-pr",
+                json={"branch_name": "codelens/fix/finding-1-abc"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["repository_id"], self.repo.id)
+        self.assertEqual(data["finding_id"], self.finding.id)
+        self.assertEqual(data["pull_request_number"], 42)
+        self.assertEqual(
+            data["pull_request_url"],
+            "https://github.com/test-pr-create-org/test-pr-create-repo/pull/42",
+        )
+        self.assertEqual(data["branch_name"], "codelens/fix/finding-1-abc")
+        self.assertEqual(data["base_branch"], "main")
+        self.assertEqual(data["message"], "Pull Request created successfully.")
+
+        # Check posted payload to GitHub
+        self.assertIsNotNone(posted_payload)
+        self.assertEqual(posted_payload["head"], "codelens/fix/finding-1-abc")
+        self.assertEqual(posted_payload["base"], "main")
+        self.assertIn("fix: resolve SEC-001 in app.py", posted_payload["title"])
+        self.assertIn("CodeLens AI Proposed Fix", posted_payload["body"])
+
+    def test_create_pr_custom_title_and_body(self):
+        """Creates a Pull Request with custom title and body."""
+        posted_payload = None
+
+        def fake_gh_req(url, method="GET", data=None, token=None, timeout=15):
+            nonlocal posted_payload
+            if "git/ref/heads/my-fix-branch" in url:
+                return {"object": {"sha": "sha-head"}}
+            if url.endswith("/repos/test-pr-create-org/test-pr-create-repo"):
+                return {"default_branch": "main"}
+            if url.endswith("/repos/test-pr-create-org/test-pr-create-repo/pulls") and method == "POST":
+                posted_payload = data
+                return {
+                    "number": 101,
+                    "html_url": "https://github.com/pull/101",
+                    "title": data.get("title"),
+                }
+            return {}
+
+        with patch.object(settings, "github_token", "mock-token"), \
+             patch("app.services.branch_fixer._authenticated_github_request", side_effect=fake_gh_req):
+            response = self.client.post(
+                f"/repositories/{self.repo.id}/findings/{self.finding.id}/create-pr",
+                json={
+                    "branch_name": "my-fix-branch",
+                    "title": "fix: custom security patch",
+                    "body": "Detailed custom PR description.",
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(posted_payload["title"], "fix: custom security patch")
+        self.assertEqual(posted_payload["body"], "Detailed custom PR description.")
+        self.assertEqual(posted_payload["head"], "my-fix-branch")
+        self.assertEqual(posted_payload["base"], "main")
+
+    def test_create_pr_repository_not_found(self):
+        """Non-existent repository returns 404."""
+        response = self.client.post(
+            f"/repositories/999999/findings/{self.finding.id}/create-pr",
+            json={"branch_name": "some-branch"},
+        )
+        self.assertEqual(response.status_code, 404)
+        self.assertIn("Repository with id 999999 not found", response.json()["detail"])
+
+    def test_create_pr_finding_not_found(self):
+        """Non-existent finding returns 404."""
+        response = self.client.post(
+            f"/repositories/{self.repo.id}/findings/999999/create-pr",
+            json={"branch_name": "some-branch"},
+        )
+        self.assertEqual(response.status_code, 404)
+        self.assertIn("Finding with id 999999 not found", response.json()["detail"])
+
+    def test_create_pr_finding_belongs_to_other_repository(self):
+        """Finding belonging to another repository returns 404."""
+        other_repo = self._create_repo("other-repo-2")
+        response = self.client.post(
+            f"/repositories/{other_repo.id}/findings/{self.finding.id}/create-pr",
+            json={"branch_name": "some-branch"},
+        )
+        self.assertEqual(response.status_code, 404)
+
+    def test_create_pr_missing_branch_name(self):
+        """Missing or empty branch_name returns 422."""
+        response1 = self.client.post(
+            f"/repositories/{self.repo.id}/findings/{self.finding.id}/create-pr",
+            json={},
+        )
+        self.assertEqual(response1.status_code, 422)
+
+        response2 = self.client.post(
+            f"/repositories/{self.repo.id}/findings/{self.finding.id}/create-pr",
+            json={"branch_name": "   "},
+        )
+        self.assertEqual(response2.status_code, 422)
+
+    def test_create_pr_branch_not_found_on_github(self):
+        """Branch not found on GitHub returns 404."""
+        with patch.object(settings, "github_token", "mock-token"), \
+             patch("app.services.branch_fixer._authenticated_github_request", side_effect=GitHubRepoNotFoundError("Branch not found")):
+            response = self.client.post(
+                f"/repositories/{self.repo.id}/findings/{self.finding.id}/create-pr",
+                json={"branch_name": "nonexistent-branch"},
+            )
+
+        self.assertEqual(response.status_code, 404)
+        self.assertIn("was not found", response.json()["detail"])
+
+    def test_create_pr_duplicate_conflict_409(self):
+        """Duplicate/already existing PR returns 409 Conflict."""
+        def fake_gh_req(url, method="GET", data=None, token=None, timeout=15):
+            if "git/ref/heads/my-branch" in url:
+                return {"object": {"sha": "head-sha"}}
+            if url.endswith("/repos/test-pr-create-org/test-pr-create-repo"):
+                return {"default_branch": "main"}
+            if method == "POST" and url.endswith("/pulls"):
+                raise PullRequestAlreadyExistsError("A pull request for branch 'my-branch' already exists.")
+            return {}
+
+        with patch.object(settings, "github_token", "mock-token"), \
+             patch("app.services.branch_fixer._authenticated_github_request", side_effect=fake_gh_req):
+            response = self.client.post(
+                f"/repositories/{self.repo.id}/findings/{self.finding.id}/create-pr",
+                json={"branch_name": "my-branch"},
+            )
+
+        self.assertEqual(response.status_code, 409)
+        self.assertIn("already exists", response.json()["detail"])
+
+    def test_create_pr_missing_github_token_503(self):
+        """Missing GITHUB_TOKEN returns 503."""
+        with patch.object(settings, "github_token", None):
+            response = self.client.post(
+                f"/repositories/{self.repo.id}/findings/{self.finding.id}/create-pr",
+                json={"branch_name": "my-branch"},
+            )
+        self.assertEqual(response.status_code, 503)
+        self.assertIn("GitHub credentials are unavailable", response.json()["detail"])
+
+    def test_create_pr_github_rate_limit_429(self):
+        """GitHub rate limit returns 429."""
+        with patch.object(settings, "github_token", "mock-token"), \
+             patch("app.services.branch_fixer._authenticated_github_request", side_effect=GitHubRateLimitError("Rate limit exceeded")):
+            response = self.client.post(
+                f"/repositories/{self.repo.id}/findings/{self.finding.id}/create-pr",
+                json={"branch_name": "my-branch"},
+            )
+        self.assertEqual(response.status_code, 429)
+
+    def test_create_pr_github_api_failure_502(self):
+        """GitHub API failure returns 502."""
+        with patch.object(settings, "github_token", "mock-token"), \
+             patch("app.services.branch_fixer._authenticated_github_request", side_effect=GitHubAPIError("Network drop")):
+            response = self.client.post(
+                f"/repositories/{self.repo.id}/findings/{self.finding.id}/create-pr",
+                json={"branch_name": "my-branch"},
+            )
+        self.assertEqual(response.status_code, 502)
+
+    def test_openapi_spec_includes_create_pr_endpoint(self):
+        """OpenAPI schema contains the create-pr endpoint."""
+        response = self.client.get("/openapi.json")
+        self.assertEqual(response.status_code, 200)
+        openapi = response.json()
+        path = "/repositories/{repository_id}/findings/{finding_id}/create-pr"
+        self.assertIn(path, openapi["paths"])
+        self.assertIn("post", openapi["paths"][path])
+
+    def test_default_branch_never_modified_during_pr_creation(self):
+        """Verifies default branch is only used as base, never modified."""
+        captured_methods = []
+
+        def fake_gh_req(url, method="GET", data=None, token=None, timeout=15):
+            captured_methods.append((method, url, data))
+            if "git/ref/heads/safe-branch" in url:
+                return {"object": {"sha": "sha-head"}}
+            if url.endswith("/repos/test-pr-create-org/test-pr-create-repo"):
+                return {"default_branch": "main"}
+            if method == "POST" and url.endswith("/pulls"):
+                return {
+                    "number": 99,
+                    "html_url": "https://github.com/pull/99",
+                    "title": data.get("title"),
+                }
+            return {}
+
+        with patch.object(settings, "github_token", "mock-token"), \
+             patch("app.services.branch_fixer._authenticated_github_request", side_effect=fake_gh_req):
+            response = self.client.post(
+                f"/repositories/{self.repo.id}/findings/{self.finding.id}/create-pr",
+                json={"branch_name": "safe-branch"},
+            )
+
+        self.assertEqual(response.status_code, 200)
+        for method, url, data in captured_methods:
+            if method in ("PUT", "DELETE", "PATCH"):
+                self.fail(f"Unexpected mutating call: {method} {url}")
+            if method == "POST" and url.endswith("/pulls"):
+                self.assertEqual(data["head"], "safe-branch")
+                self.assertEqual(data["base"], "main")
+

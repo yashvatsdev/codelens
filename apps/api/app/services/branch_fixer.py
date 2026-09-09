@@ -66,6 +66,16 @@ class BranchCommitFailedError(BranchFixerError):
         self.reason = reason
 
 
+class PullRequestAlreadyExistsError(BranchFixerError):
+    """Raised when an open PR already exists for the given head branch."""
+    pass
+
+
+class BranchNotFoundError(BranchFixerError):
+    """Raised when the specified head branch is not found on GitHub."""
+    pass
+
+
 # ---------------------------------------------------------------------------
 # Authenticated GitHub HTTP Request Helper
 # ---------------------------------------------------------------------------
@@ -122,8 +132,18 @@ def _authenticated_github_request(
             raise GitHubRepoNotFoundError(
                 f"GitHub resource not found: {url}"
             ) from err
+        err_body = ""
+        try:
+            err_body = err.read().decode("utf-8")
+        except Exception:
+            pass
+        if err.code == 409 or (err.code == 422 and "already exists" in (err_body.lower() + " " + str(err.reason).lower())):
+            raise PullRequestAlreadyExistsError(
+                "A pull request already exists for this branch."
+            ) from err
+        detail_msg = f"{err.reason} {err_body}".strip() if err_body else str(err.reason)
         raise GitHubAPIError(
-            f"GitHub API returned error {err.code}: {err.reason}"
+            f"GitHub API returned error {err.code}: {detail_msg}"
         ) from err
     except urllib.error.URLError as err:
         raise GitHubAPIError(
@@ -372,3 +392,129 @@ def apply_ai_fix_to_github_branch(
         "file_path": file_path,
         "message": "AI fix applied successfully to GitHub branch.",
     }
+
+
+# ---------------------------------------------------------------------------
+# Phase 2: Pull Request Creation from Fix Branch
+# ---------------------------------------------------------------------------
+
+def generate_default_pr_title(finding: Finding) -> str:
+    """Generate a clean, conventional Pull Request title for a finding fix."""
+    path_suffix = f" in {finding.file_path}" if finding.file_path else ""
+    return f"fix: resolve {finding.rule_id}{path_suffix}"
+
+
+def generate_default_pr_body(finding: Finding, branch_name: str) -> str:
+    """Generate structured markdown body for the Pull Request."""
+    lines = [
+        "## 🔍 CodeLens AI Proposed Fix",
+        "",
+        f"This Pull Request proposes an automated code fix for finding **`{finding.rule_id}`**.",
+        "",
+        "### Finding Details",
+        f"- **File:** `{finding.file_path or 'unknown'}`",
+        f"- **Line:** {finding.line_number if finding.line_number is not None else 'N/A'}",
+        f"- **Severity:** `{finding.severity.upper()}`",
+        f"- **Category:** `{finding.category.capitalize()}`",
+        f"- **Issue:** {finding.message}",
+        f"- **Branch:** `{branch_name}`",
+        "",
+        "---",
+        "*Created automatically by [CodeLens](https://github.com/yashvatsdev/codelens)*",
+    ]
+    return "\n".join(lines)
+
+
+def create_pull_request_on_github(
+    owner: str,
+    repo: str,
+    head: str,
+    base: str,
+    title: str,
+    body: str,
+    token: str,
+) -> dict:
+    """Create a Pull Request on GitHub via POST /repos/{owner}/{repo}/pulls."""
+    url = f"https://api.github.com/repos/{owner}/{repo}/pulls"
+    payload = {
+        "title": title,
+        "head": head,
+        "base": base,
+        "body": body,
+    }
+    return _authenticated_github_request(url, method="POST", data=payload, token=token)
+
+
+def create_pr_from_fix_branch(
+    repository: Repository,
+    finding: Finding,
+    branch_name: str,
+    title: str | None = None,
+    body: str | None = None,
+    token: str | None = None,
+) -> dict:
+    """Validate head branch, fetch default branch, and create a Pull Request on GitHub.
+
+    Steps:
+    1. Validate GitHub credentials.
+    2. Verify head branch exists on GitHub.
+    3. Determine repository default branch.
+    4. Construct PR title and body.
+    5. Call GitHub REST API to create the PR.
+    6. Return PR metadata.
+    """
+    auth_token = token or settings.github_token
+    if not auth_token:
+        raise GitHubCredentialsUnavailableError(
+            "GitHub credentials are unavailable (missing GITHUB_TOKEN)"
+        )
+
+    # 1. Verify head branch exists on GitHub
+    try:
+        get_branch_head_sha(
+            owner=repository.owner,
+            repo=repository.name,
+            branch=branch_name,
+            token=auth_token,
+        )
+    except GitHubRepoNotFoundError as err:
+        raise BranchNotFoundError(
+            f"Branch '{branch_name}' was not found on repository '{repository.full_name}'."
+        ) from err
+
+    # 2. Determine repository default branch
+    default_branch = get_repository_default_branch(
+        owner=repository.owner,
+        repo=repository.name,
+        token=auth_token,
+    )
+
+    # 3. Prepare title and body
+    pr_title = title.strip() if title and title.strip() else generate_default_pr_title(finding)
+    pr_body = body.strip() if body and body.strip() else generate_default_pr_body(finding, branch_name)
+
+    # 4. Create Pull Request
+    pr_data = create_pull_request_on_github(
+        owner=repository.owner,
+        repo=repository.name,
+        head=branch_name,
+        base=default_branch,
+        title=pr_title,
+        body=pr_body,
+        token=auth_token,
+    )
+
+    pr_number = pr_data.get("number")
+    pr_url = pr_data.get("html_url") or f"https://github.com/{repository.owner}/{repository.name}/pull/{pr_number}"
+
+    return {
+        "repository_id": repository.id,
+        "finding_id": finding.id,
+        "pull_request_number": pr_number,
+        "pull_request_url": pr_url,
+        "branch_name": branch_name,
+        "base_branch": default_branch,
+        "title": pr_data.get("title") or pr_title,
+        "message": "Pull Request created successfully.",
+    }
+

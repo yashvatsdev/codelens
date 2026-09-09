@@ -12,6 +12,8 @@ from app.schemas.finding import (
     AnalysisSummaryResponse,
     ApplyFixBranchRequest,
     ApplyFixBranchResponse,
+    CreatePRFromBranchRequest,
+    CreatePRFromBranchResponse,
     FindingExplanationResponse,
     FindingFixResponse,
     FindingResponse,
@@ -78,9 +80,12 @@ from app.services.pr_commenter import (
 from app.services.branch_fixer import (
     BranchCommitFailedError,
     BranchFixerError,
+    BranchNotFoundError,
     GitHubCredentialsUnavailableError as BranchFixerCredentialsUnavailableError,
+    PullRequestAlreadyExistsError,
     UnchangedFixError,
     apply_ai_fix_to_github_branch,
+    create_pr_from_fix_branch,
 )
 from app.core.ai_errors import (
     AIQuotaExceededError,
@@ -711,6 +716,99 @@ def apply_fix_to_branch_endpoint(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=str(e),
         )
+
+
+@router.post(
+    "/{repository_id}/findings/{finding_id}/create-pr",
+    response_model=CreatePRFromBranchResponse,
+)
+def create_pr_from_branch_endpoint(
+    repository_id: int,
+    finding_id: int,
+    payload: CreatePRFromBranchRequest,
+    db: Session = Depends(get_db),
+):
+    """Create a GitHub Pull Request from an already-created AI fix branch.
+
+    1. Validates repository exists in database.
+    2. Validates finding exists and belongs to repository.
+    3. Validates branch_name is provided.
+    4. Verifies branch exists on GitHub.
+    5. Determines repository default branch.
+    6. Creates Pull Request with head=branch_name and base=default_branch.
+    7. Returns Pull Request metadata.
+    """
+    repository = db.get(Repository, repository_id)
+    if not repository:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Repository with id {repository_id} not found",
+        )
+
+    finding = db.get(Finding, finding_id)
+    if not finding or finding.repository_id != repository_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Finding with id {finding_id} not found for repository {repository_id}",
+        )
+
+    branch_name = payload.branch_name.strip()
+    if not branch_name:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="branch_name cannot be empty",
+        )
+
+    if not settings.github_token:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="GitHub credentials are unavailable (missing GITHUB_TOKEN)",
+        )
+
+    try:
+        return create_pr_from_fix_branch(
+            repository=repository,
+            finding=finding,
+            branch_name=branch_name,
+            title=payload.title,
+            body=payload.body,
+        )
+    except BranchNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except PullRequestAlreadyExistsError as e:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(e),
+        )
+    except BranchFixerCredentialsUnavailableError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(e),
+        )
+    except GitHubRateLimitError as e:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=str(e),
+        )
+    except GitHubRepoNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except GitHubAPIError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(e),
+        )
+    except BranchFixerError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(e),
+        )
+
 
 
 

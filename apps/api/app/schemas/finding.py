@@ -153,3 +153,22 @@ class ApplyFixBranchResponse(BaseModel):
     message: str = "AI fix applied successfully to GitHub branch."
 
 
+class CreatePRFromBranchRequest(BaseModel):
+    """Request payload for creating a GitHub Pull Request from a fix branch."""
+    branch_name: str = Field(..., min_length=1, description="Name of the head branch containing the fix")
+    title: str | None = Field(default=None, description="Optional custom Pull Request title")
+    body: str | None = Field(default=None, description="Optional custom Pull Request description")
+
+
+class CreatePRFromBranchResponse(BaseModel):
+    """Response returned after successfully creating a GitHub Pull Request."""
+    repository_id: int
+    finding_id: int
+    pull_request_number: int
+    pull_request_url: str
+    branch_name: str
+    base_branch: str
+    title: str
+    message: str = "Pull Request created successfully."
+
+
