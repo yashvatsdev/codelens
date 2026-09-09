@@ -142,15 +142,16 @@ RELEVANT SOURCE CODE CONTEXT:
 
 INSTRUCTIONS:
 1. Analyze the static-analysis findings above and assess the overall risk of this PR.
-2. Prioritize security and correctness issues above style issues.
-3. For each significant finding, explain what is wrong, why it matters, and how to fix it.
-4. Provide an overall risk level: "low", "medium", "high", or "critical".
-5. Provide actionable recommendations prioritized by importance.
-6. Do NOT invent issues that are not supported by the supplied findings or source context.
-7. Do NOT fabricate file paths, line numbers, or vulnerabilities.
-8. If there are no static-analysis findings, set risk_level to "low" and note that no issues were detected.
-9. Be specific and actionable. Avoid generic filler advice.
-10. If evidence is insufficient to determine impact, explicitly say so.
+2. Focus on issues introduced or directly affected by the pull request. Do not report unrelated pre-existing issues.
+3. Prioritize security and correctness issues above style issues.
+4. For each significant finding, explain what is wrong, why it matters, and how to fix it.
+5. Provide an overall risk level: "low", "medium", "high", or "critical".
+6. Provide actionable recommendations prioritized by importance.
+7. Do NOT invent issues that are not supported by the supplied findings or source context.
+8. Do NOT fabricate file paths, line numbers, or vulnerabilities.
+9. If there are no static-analysis findings, set risk_level to "low" and note that no issues were detected.
+10. Be specific and actionable. Avoid generic filler advice.
+11. If evidence is insufficient to determine impact, explicitly say so.
 
 Return your answer in valid JSON matching this schema:
 {{

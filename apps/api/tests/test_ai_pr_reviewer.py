@@ -165,6 +165,8 @@ class TestAIPRReviewerService(unittest.TestCase):
         self.assertIn("PY-BARE-EXCEPT", prompt)
         self.assertIn("Bare except clause used", prompt)
         self.assertIn("line_25", prompt)
+        self.assertIn("Focus on issues introduced or directly affected by the pull request", prompt)
+        self.assertIn("Do not report unrelated pre-existing issues", prompt)
 
     def test_json_in_markdown_fences_parsed_correctly(self):
         """Responses wrapped in markdown ```json ... ``` fences parse cleanly."""
@@ -511,7 +513,7 @@ class TestRegressionSafety(unittest.TestCase):
             [{
                 "filename": "app.py",
                 "status": "modified",
-                "patch": "",
+                "patch": None,
                 "contents_url": "https://api.github.com/contents/app.py",
             }],
             {

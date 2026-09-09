@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import base64
 import json
+import re
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
@@ -184,6 +185,53 @@ def _is_analyzable_extension(file_path: str) -> bool:
     return ext in ANALYZABLE_EXTENSIONS
 
 
+_HUNK_HEADER_RE = re.compile(
+    r"@@\s+-[0-9]+(?:,[0-9]+)?\s+\+([0-9]+)(?:,([0-9]+))?\s+@@"
+)
+
+
+def extract_changed_line_ranges(patch: str | None) -> list[tuple[int, int]]:
+    """Extract inclusive (start, end) line ranges for new/added lines from a unified diff patch.
+
+    Parses hunk headers in the format:
+        @@ -old_start[,old_count] +new_start[,new_count] @@
+
+    Rules:
+      - Supports multiple hunks in a single patch.
+      - If new_count is omitted, it defaults to 1.
+      - If new_count is 0 (pure deletion), no new lines were added in the new file, so it is ignored.
+      - Returns inclusive ranges: [new_start, new_start + new_count - 1].
+      - Handles None, empty, or malformed patch strings safely without crashing.
+    """
+    if not patch or not isinstance(patch, str):
+        return []
+
+    ranges: list[tuple[int, int]] = []
+    for match in _HUNK_HEADER_RE.finditer(patch):
+        try:
+            start = int(match.group(1))
+            count_str = match.group(2)
+            count = int(count_str) if count_str is not None else 1
+            if count > 0:
+                end = start + count - 1
+                ranges.append((start, end))
+        except (ValueError, IndexError):
+            continue
+
+    return ranges
+
+
+def is_line_changed(line_number: int | None, ranges: list[tuple[int, int]]) -> bool:
+    """Check if a line number falls within any of the changed line ranges.
+
+    Returns False if line_number is None or ranges is empty.
+    Ranges are inclusive: [start, end].
+    """
+    if line_number is None:
+        return False
+    return any(start <= line_number <= end for start, end in ranges)
+
+
 def review_pull_request(
     owner: str,
     repo: str,
@@ -248,7 +296,19 @@ def review_pull_request(
         # Run the existing analyzer dispatcher
         raw_findings = analyze_source_file(content=content, file_path=cf.filename)
 
-        for rf in raw_findings:
+        # Diff-aware filtering:
+        # If GitHub provided a patch, filter findings to only changed line ranges.
+        # If patch is not provided (diff unavailable), preserve existing behavior (keep all findings).
+        if cf.patch is not None:
+            changed_ranges = extract_changed_line_ranges(cf.patch)
+            applicable_findings = [
+                rf for rf in raw_findings
+                if is_line_changed(rf.get("line_number"), changed_ranges)
+            ]
+        else:
+            applicable_findings = raw_findings
+
+        for rf in applicable_findings:
             result.findings.append(
                 PRFinding(
                     file_path=rf["file_path"],

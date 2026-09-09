@@ -25,8 +25,10 @@ from app.services.pr_reviewer import (
     PRChangedFile,
     PRNotFoundError,
     PRReviewResult,
-    review_pull_request,
     _is_analyzable_extension,
+    extract_changed_line_ranges,
+    is_line_changed,
+    review_pull_request,
 )
 
 
@@ -59,7 +61,7 @@ def _make_pr_file(
     entry = {
         "filename": filename,
         "status": status,
-        "patch": patch or "",
+        "patch": patch,
     }
     if contents_url is not None:
         entry["contents_url"] = contents_url
@@ -601,5 +603,239 @@ class TestPRReviewEndpoint(unittest.TestCase):
         )
 
 
+# ---------------------------------------------------------------------------
+# Phase 4: Diff-Aware PR Review Tests
+# ---------------------------------------------------------------------------
+class TestDiffAwarePRReviewer(unittest.TestCase):
+    """Test diff parser helpers and diff-aware finding filtering."""
+
+    def test_extract_single_changed_hunk(self):
+        patch = "@@ -10,4 +10,8 @@ def foo():\n+new_line\n"
+        ranges = extract_changed_line_ranges(patch)
+        self.assertEqual(ranges, [(10, 17)])
+
+    def test_extract_multiple_changed_hunks(self):
+        patch = (
+            "@@ -1,2 +1,3 @@\n+line1\n"
+            "@@ -20,5 +21,4 @@\n+line2\n"
+        )
+        ranges = extract_changed_line_ranges(patch)
+        self.assertEqual(ranges, [(1, 3), (21, 24)])
+
+    def test_extract_deleted_lines_not_treated_as_changed(self):
+        # count=0 indicates pure deletion in new file; should be ignored
+        patch = "@@ -10,4 +10,0 @@\n-deleted_line\n"
+        ranges = extract_changed_line_ranges(patch)
+        self.assertEqual(ranges, [])
+
+    def test_extract_empty_patch(self):
+        self.assertEqual(extract_changed_line_ranges(""), [])
+
+    def test_extract_missing_patch(self):
+        self.assertEqual(extract_changed_line_ranges(None), [])
+
+    def test_extract_malformed_patch(self):
+        malformed = "some git log header without unified diff @@ broken @@"
+        self.assertEqual(extract_changed_line_ranges(malformed), [])
+
+    def test_extract_default_count_one(self):
+        # When count is omitted (+5), count defaults to 1
+        patch = "@@ -5 +5 @@\n+single line"
+        ranges = extract_changed_line_ranges(patch)
+        self.assertEqual(ranges, [(5, 5)])
+
+    def test_is_line_changed_inside_range(self):
+        ranges = [(10, 17)]
+        self.assertTrue(is_line_changed(10, ranges))
+        self.assertTrue(is_line_changed(14, ranges))
+        self.assertTrue(is_line_changed(17, ranges))
+
+    def test_is_line_changed_outside_range(self):
+        ranges = [(10, 17)]
+        self.assertFalse(is_line_changed(9, ranges))
+        self.assertFalse(is_line_changed(18, ranges))
+        self.assertFalse(is_line_changed(1, ranges))
+
+    def test_is_line_changed_exact_boundaries(self):
+        ranges = [(10, 20)]
+        self.assertTrue(is_line_changed(10, ranges))
+        self.assertTrue(is_line_changed(20, ranges))
+
+    def test_is_line_changed_none_or_empty(self):
+        self.assertFalse(is_line_changed(None, [(1, 10)]))
+        self.assertFalse(is_line_changed(5, []))
+
+    @patch("app.services.pr_reviewer._github_api_request")
+    def test_finding_inside_changed_range_kept(self, mock_api):
+        """Finding on line 1 is inside the changed hunk [1, 5] and should be kept."""
+        python_content = "import os\n\nx = 1\n"
+        patch = "@@ -0,0 +1,5 @@\n+import os\n"
+
+        mock_api.side_effect = [
+            {"number": 201, "state": "open"},
+            [_make_pr_file("src/app.py", status="modified", patch=patch)],
+            {"path": "src/app.py", "sha": "a1", "size": len(python_content),
+             "content": _base64_encode(python_content)},
+        ]
+
+        result = review_pull_request("owner", "repo", 201, repository_id=10)
+        self.assertEqual(len(result.findings), 1)
+        self.assertEqual(result.findings[0].rule_id, "PY-UNUSED-IMPORT")
+        self.assertEqual(result.findings[0].line_number, 1)
+
+    @patch("app.services.pr_reviewer._github_api_request")
+    def test_finding_outside_changed_range_removed(self, mock_api):
+        """Pre-existing finding on line 1 is outside the PR changed hunk [20, 25] and must be filtered out."""
+        # Line 1 has unused import, but the PR only modified lines 20-25
+        python_lines = ["import os"] + [f"x_{i} = {i}" for i in range(2, 30)]
+        python_content = "\n".join(python_lines) + "\n"
+        patch = "@@ -20,4 +20,6 @@\n+x_20 = 99\n"
+
+        mock_api.side_effect = [
+            {"number": 202, "state": "open"},
+            [_make_pr_file("src/app.py", status="modified", patch=patch)],
+            {"path": "src/app.py", "sha": "a2", "size": len(python_content),
+             "content": _base64_encode(python_content)},
+        ]
+
+        result = review_pull_request("owner", "repo", 202, repository_id=10)
+        # Line 1 finding must be removed because it is outside the PR diff
+        self.assertEqual(len(result.findings), 0)
+
+    @patch("app.services.pr_reviewer._github_api_request")
+    def test_finding_on_exact_boundary_kept(self, mock_api):
+        """Finding on the exact start or end line of a hunk is kept."""
+        # Unused import on line 10, hunk starts at line 10
+        python_lines = [f"a_{i} = {i}" for i in range(1, 10)] + ["import sys", "b = 1"]
+        python_content = "\n".join(python_lines) + "\n"
+        patch = "@@ -10,2 +10,3 @@\n+import sys\n"
+
+        mock_api.side_effect = [
+            {"number": 203, "state": "open"},
+            [_make_pr_file("src/boundary.py", status="modified", patch=patch)],
+            {"path": "src/boundary.py", "sha": "a3", "size": len(python_content),
+             "content": _base64_encode(python_content)},
+        ]
+
+        result = review_pull_request("owner", "repo", 203, repository_id=10)
+        self.assertEqual(len(result.findings), 1)
+        self.assertEqual(result.findings[0].line_number, 10)
+
+    @patch("app.services.pr_reviewer._github_api_request")
+    def test_deleted_lines_not_treated_as_changed(self, mock_api):
+        """Hunk with only deletions (+10,0) does not keep pre-existing findings."""
+        python_content = "import os\n\nx = 1\n"
+        patch = "@@ -1,4 +1,0 @@\n-import os\n"
+
+        mock_api.side_effect = [
+            {"number": 204, "state": "open"},
+            [_make_pr_file("src/deleted_hunk.py", status="modified", patch=patch)],
+            {"path": "src/deleted_hunk.py", "sha": "a4", "size": len(python_content),
+             "content": _base64_encode(python_content)},
+        ]
+
+        result = review_pull_request("owner", "repo", 204, repository_id=10)
+        # No lines added or changed in new file -> 0 findings kept
+        self.assertEqual(len(result.findings), 0)
+
+    @patch("app.services.pr_reviewer._github_api_request")
+    def test_empty_patch_produces_no_findings(self, mock_api):
+        """An empty patch string indicates no lines were changed, so all findings are filtered."""
+        python_content = "import os\nx = 1\n"
+
+        mock_api.side_effect = [
+            {"number": 205, "state": "open"},
+            [_make_pr_file("src/empty.py", status="modified", patch="")],
+            {"path": "src/empty.py", "sha": "a5", "size": len(python_content),
+             "content": _base64_encode(python_content)},
+        ]
+
+        result = review_pull_request("owner", "repo", 205, repository_id=10)
+        self.assertEqual(len(result.findings), 0)
+
+    @patch("app.services.pr_reviewer._github_api_request")
+    def test_malformed_patch_safely_produces_no_findings(self, mock_api):
+        """Malformed patch text does not crash the reviewer and filters findings safely."""
+        python_content = "import os\nx = 1\n"
+
+        mock_api.side_effect = [
+            {"number": 206, "state": "open"},
+            [_make_pr_file("src/malformed.py", status="modified", patch="not @@ valid @@ patch")],
+            {"path": "src/malformed.py", "sha": "a6", "size": len(python_content),
+             "content": _base64_encode(python_content)},
+        ]
+
+        result = review_pull_request("owner", "repo", 206, repository_id=10)
+        self.assertEqual(len(result.findings), 0)
+
+    @patch("app.services.pr_reviewer._github_api_request")
+    def test_file_with_no_patch_preserves_existing_behavior(self, mock_api):
+        """When GitHub does not provide a patch (patch is None), all findings are preserved."""
+        python_content = "import os\nx = 1\n"
+
+        mock_api.side_effect = [
+            {"number": 207, "state": "open"},
+            [_make_pr_file("src/no_patch.py", status="modified", patch=None)],
+            {"path": "src/no_patch.py", "sha": "a7", "size": len(python_content),
+             "content": _base64_encode(python_content)},
+        ]
+
+        result = review_pull_request("owner", "repo", 207, repository_id=10)
+        # Without a patch, fallback preserves all findings
+        self.assertTrue(len(result.findings) >= 1)
+        self.assertEqual(result.findings[0].rule_id, "PY-UNUSED-IMPORT")
+
+    @patch("app.services.pr_reviewer._github_api_request")
+    def test_multiple_files_with_diff_filtering(self, mock_api):
+        """PR with two files: one has finding in diff (kept), one has finding outside diff (removed)."""
+        content_a = "import os\nx = 1\n"  # finding on line 1
+        patch_a = "@@ -1,2 +1,3 @@\n+import os\n"  # covers line 1
+
+        content_b = "import sys\n" + "\n".join([f"y_{i} = {i}" for i in range(2, 20)])  # finding on line 1
+        patch_b = "@@ -10,3 +10,5 @@\n+y_10 = 99\n"  # covers line 10-14, line 1 is outside
+
+        mock_api.side_effect = [
+            {"number": 208, "state": "open"},
+            [
+                _make_pr_file("src/file_a.py", status="modified", patch=patch_a),
+                _make_pr_file("src/file_b.py", status="modified", patch=patch_b),
+            ],
+            {"path": "src/file_a.py", "sha": "fa", "size": len(content_a),
+             "content": _base64_encode(content_a)},
+            {"path": "src/file_b.py", "sha": "fb", "size": len(content_b),
+             "content": _base64_encode(content_b)},
+        ]
+
+        result = review_pull_request("owner", "repo", 208, repository_id=10)
+        self.assertEqual(result.files_analyzed, 2)
+        # Only file_a's finding should be kept; file_b's finding is outside its diff
+        self.assertEqual(len(result.findings), 1)
+        self.assertEqual(result.findings[0].file_path, "src/file_a.py")
+
+    @patch("app.services.pr_reviewer._github_api_request")
+    def test_renamed_file_with_diff(self, mock_api):
+        """Renamed file with patch filters findings to changed lines using new filename."""
+        content = "console.log('debug');\nconst a = 1;\n"
+        patch = "@@ -1,2 +1,2 @@\n+console.log('debug');\n"
+
+        mock_api.side_effect = [
+            {"number": 209, "state": "open"},
+            [_make_pr_file(
+                "src/new_name.js",
+                status="renamed",
+                patch=patch,
+                previous_filename="src/old_name.js",
+            )],
+            {"path": "src/new_name.js", "sha": "rn", "size": len(content),
+             "content": _base64_encode(content)},
+        ]
+
+        result = review_pull_request("owner", "repo", 209, repository_id=10)
+        self.assertEqual(len(result.findings), 1)
+        self.assertEqual(result.findings[0].file_path, "src/new_name.js")
+        self.assertEqual(result.findings[0].rule_id, "JS-CONSOLE-LOG")
+
+
 if __name__ == "__main__":
     unittest.main()
+
