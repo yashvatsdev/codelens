@@ -13,6 +13,7 @@ import {
   CircleCheck,
   Code2,
   Copy,
+  ExternalLink,
   FileCode2,
   Filter,
   FolderGit2,
@@ -37,9 +38,12 @@ import {
 import { Button } from "@/components/ui/button";
 import { PRReviewsContent } from "@/components/pr-reviews-content";
 import { api, ApiError } from "@/lib/api";
+import { api, ApiError, getFriendlyErrorMessage, type FriendlyError } from "@/lib/api";
 import { calculateHealthScore, getHealthColor } from "@/lib/health";
 import type {
   AnalysisSummaryResponse,
+  ApplyFixBranchResponse,
+  CreatePRFromBranchResponse,
   FindingFixResponse,
   FindingResponse,
   FindingTestResponse,
@@ -173,6 +177,18 @@ export function CodeLensDashboard() {
   const [fixError, setFixError] = useState<string | null>(null);
   const [isConfirmingApply, setIsConfirmingApply] = useState(false);
   const [isFixApplied, setIsFixApplied] = useState(false);
+
+  // GitHub branch & PR states for selected finding fix
+  const [isConfirmingGitHubApply, setIsConfirmingGitHubApply] = useState(false);
+  const [isApplyingToGitHub, setIsApplyingToGitHub] = useState(false);
+  const [gitHubApplyResult, setGitHubApplyResult] = useState<ApplyFixBranchResponse | null>(null);
+  const [gitHubApplyError, setGitHubApplyError] = useState<FriendlyError | null>(null);
+  const [isConfirmingCreatePR, setIsConfirmingCreatePR] = useState(false);
+  const [prTitleInput, setPrTitleInput] = useState("");
+  const [prBodyInput, setPrBodyInput] = useState("");
+  const [isCreatingPR, setIsCreatingPR] = useState(false);
+  const [createPRResult, setCreatePRResult] = useState<CreatePRFromBranchResponse | null>(null);
+  const [createPRError, setCreatePRError] = useState<FriendlyError | null>(null);
 
   // AI Test state for selected finding
   const [isGeneratingTest, setIsGeneratingTest] = useState(false);
@@ -319,6 +335,14 @@ export function CodeLensDashboard() {
     setFixError(null);
     setIsConfirmingApply(false);
     setIsFixApplied(false);
+    setIsConfirmingGitHubApply(false);
+    setIsApplyingToGitHub(false);
+    setGitHubApplyResult(null);
+    setGitHubApplyError(null);
+    setIsConfirmingCreatePR(false);
+    setIsCreatingPR(false);
+    setCreatePRResult(null);
+    setCreatePRError(null);
     try {
       const res = await api.fixFinding(
         selectedFinding.repository_id,
@@ -333,6 +357,56 @@ export function CodeLensDashboard() {
       );
     } finally {
       setIsGeneratingFix(false);
+    }
+  };
+
+  // GitHub branch apply action
+  const handleApplyFixToGitHub = async () => {
+    if (!selectedFinding || isApplyingToGitHub) return;
+    setIsApplyingToGitHub(true);
+    setGitHubApplyError(null);
+    setIsConfirmingGitHubApply(false);
+    try {
+      const res = await api.applyFixToBranch(
+        selectedFinding.repository_id,
+        selectedFinding.id,
+      );
+      setGitHubApplyResult(res);
+      setNotice(`Fix committed to GitHub branch: ${res.branch_name}`);
+    } catch (err) {
+      setGitHubApplyError(
+        getFriendlyErrorMessage(err, "Failed to apply fix to GitHub branch."),
+      );
+    } finally {
+      setIsApplyingToGitHub(false);
+    }
+  };
+
+  // GitHub Pull Request creation action
+  const handleCreatePR = async () => {
+    if (!selectedFinding || !gitHubApplyResult || isCreatingPR) return;
+    setIsCreatingPR(true);
+    setCreatePRError(null);
+    setIsConfirmingCreatePR(false);
+    try {
+      const res = await api.createPRFromBranch(
+        selectedFinding.repository_id,
+        selectedFinding.id,
+        gitHubApplyResult.branch_name,
+        prTitleInput.trim() || undefined,
+        prBodyInput.trim() || undefined,
+      );
+      setCreatePRResult(res);
+      setNotice(`Pull Request #${res.pull_request_number} created successfully.`);
+      if (res.pull_request_url) {
+        window.open(res.pull_request_url, "_blank", "noopener,noreferrer");
+      }
+    } catch (err) {
+      setCreatePRError(
+        getFriendlyErrorMessage(err, "Failed to create Pull Request."),
+      );
+    } finally {
+      setIsCreatingPR(false);
     }
   };
 
@@ -377,6 +451,14 @@ export function CodeLensDashboard() {
     setIsGeneratingFix(false);
     setIsConfirmingApply(false);
     setIsFixApplied(false);
+    setIsConfirmingGitHubApply(false);
+    setIsApplyingToGitHub(false);
+    setGitHubApplyResult(null);
+    setGitHubApplyError(null);
+    setIsConfirmingCreatePR(false);
+    setIsCreatingPR(false);
+    setCreatePRResult(null);
+    setCreatePRError(null);
     setTestResult(null);
     setTestError(null);
     setIsGeneratingTest(false);
@@ -1109,6 +1191,295 @@ export function CodeLensDashboard() {
                       </pre>
                     </div>
                   )}
+
+                  {/* GitHub Branch & Pull Request Flow */}
+                  <div className="pt-2 border-t border-white/[0.06] space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="text-xs font-semibold text-zinc-300 flex items-center gap-1.5">
+                        <GitBranch className="size-3.5 text-cyan-400" />
+                        <span>GitHub Integration</span>
+                      </div>
+                      {!gitHubApplyResult && !isApplyingToGitHub && !isConfirmingGitHubApply && (
+                        <Button
+                          size="xs"
+                          onClick={() => {
+                            setIsConfirmingGitHubApply(true);
+                            setGitHubApplyError(null);
+                          }}
+                          className="h-6 text-[11px] bg-cyan-300 text-black hover:bg-cyan-200 font-medium"
+                        >
+                          <GitBranch className="size-3 mr-1" />
+                          Apply Fix to GitHub
+                        </Button>
+                      )}
+                    </div>
+
+                    {/* Step 3: Confirmation before executing GitHub Apply */}
+                    {isConfirmingGitHubApply && (
+                      <div className="rounded-lg border border-cyan-500/30 bg-cyan-950/25 p-3.5 space-y-2.5 text-xs animate-in fade-in duration-150">
+                        <div className="flex items-start gap-2.5">
+                          <AlertCircle className="size-4 text-cyan-400 shrink-0 mt-0.5" />
+                          <div>
+                            <div className="font-semibold text-white">
+                              Apply this AI-generated fix to GitHub?
+                            </div>
+                            <div className="text-[11px] text-zinc-400 mt-0.5 leading-relaxed">
+                              This will create a new GitHub branch and commit the proposed fix. Your default branch will not be modified.
+                            </div>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-end gap-2 pt-1">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setIsConfirmingGitHubApply(false)}
+                            className="h-7 text-xs text-zinc-400 hover:text-zinc-200"
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={handleApplyFixToGitHub}
+                            className="h-7 text-xs bg-cyan-300 text-black hover:bg-cyan-200 font-medium"
+                          >
+                            <Check className="size-3.5 mr-1" />
+                            Apply Fix
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Step 4 Loading: Creating fix branch... */}
+                    {isApplyingToGitHub && (
+                      <div className="rounded-lg border border-cyan-500/20 bg-cyan-950/20 p-3.5 flex items-center gap-3 text-xs text-cyan-200 animate-in fade-in duration-150">
+                        <Loader2 className="size-4 animate-spin text-cyan-300" />
+                        <span>Creating fix branch...</span>
+                      </div>
+                    )}
+
+                    {/* GitHub Apply Error */}
+                    {gitHubApplyError && (
+                      <div
+                        className={`rounded-lg border p-3.5 text-xs flex items-start gap-2.5 animate-in fade-in duration-150 ${
+                          gitHubApplyError.isQuota
+                            ? "border-amber-500/30 bg-amber-500/10 text-amber-200"
+                            : "border-rose-500/20 bg-rose-500/10 text-rose-300"
+                        }`}
+                      >
+                        <AlertCircle
+                          className={`size-4 shrink-0 mt-0.5 ${
+                            gitHubApplyError.isQuota ? "text-amber-400" : "text-rose-400"
+                          }`}
+                        />
+                        <div className="space-y-0.5">
+                          {gitHubApplyError.title && (
+                            <div className="font-semibold text-white">
+                              {gitHubApplyError.title}
+                            </div>
+                          )}
+                          <div className="leading-relaxed">
+                            {gitHubApplyError.message}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Step 4 Success: Fix committed to GitHub */}
+                    {gitHubApplyResult && (
+                      <div className="rounded-lg border border-emerald-500/30 bg-emerald-950/20 p-3.5 space-y-3 text-xs animate-in fade-in duration-150">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2 text-emerald-300 font-semibold">
+                            <CircleCheck className="size-4 text-emerald-400 shrink-0" />
+                            <span>Fix committed to GitHub</span>
+                          </div>
+                          {gitHubApplyResult.commit_url && (
+                            <a
+                              href={gitHubApplyResult.commit_url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1 text-[11px] font-mono text-cyan-300 hover:text-cyan-200 hover:underline"
+                            >
+                              <span>View Commit</span>
+                              <ExternalLink className="size-3" />
+                            </a>
+                          )}
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 font-mono text-[11px] bg-black/40 p-2.5 rounded border border-white/[0.06]">
+                          <div>
+                            <span className="text-zinc-500">Branch: </span>
+                            <span className="text-zinc-200">{gitHubApplyResult.branch_name}</span>
+                          </div>
+                          <div>
+                            <span className="text-zinc-500">Commit: </span>
+                            <span className="text-zinc-200">
+                              {gitHubApplyResult.commit_sha.slice(0, 7)}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Step 4 -> 5: Button to initiate Pull Request */}
+                        {!createPRResult && !isConfirmingCreatePR && !isCreatingPR && (
+                          <div className="pt-1 flex justify-end">
+                            <Button
+                              size="sm"
+                              onClick={() => {
+                                setIsConfirmingCreatePR(true);
+                                setPrTitleInput(
+                                  `fix: resolve ${selectedFinding?.rule_id || 'issue'} in ${selectedFinding?.file_path || 'file'}`
+                                );
+                                setPrBodyInput(
+                                  `## 🔍 CodeLens AI Proposed Fix\n\nThis Pull Request proposes an automated code fix for finding **\`${selectedFinding?.rule_id || ''}\`**.\n\n- **File:** \`${selectedFinding?.file_path || 'unknown'}\`\n- **Severity:** \`${selectedFinding?.severity?.toUpperCase() || ''}\`\n- **Issue:** ${selectedFinding?.message || ''}\n- **Branch:** \`${gitHubApplyResult.branch_name}\`\n\n---\n*Created automatically by CodeLens*`
+                                );
+                                setCreatePRError(null);
+                              }}
+                              className="h-7 text-xs bg-cyan-300 text-black hover:bg-cyan-200 font-medium"
+                            >
+                              <GitPullRequest className="size-3.5 mr-1.5" />
+                              Create Pull Request
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Step 5: Create PR confirmation form */}
+                    {isConfirmingCreatePR && (
+                      <div className="rounded-lg border border-cyan-500/30 bg-cyan-950/25 p-3.5 space-y-3 text-xs animate-in fade-in duration-150">
+                        <div className="flex items-center gap-2 text-cyan-300 font-semibold">
+                          <GitPullRequest className="size-4" />
+                          <span>Create Pull Request</span>
+                        </div>
+                        <div className="space-y-2.5">
+                          <div>
+                            <label className="block text-[11px] text-zinc-400 mb-1 font-medium">
+                              PR Title
+                            </label>
+                            <input
+                              type="text"
+                              value={prTitleInput}
+                              onChange={(e) => setPrTitleInput(e.target.value)}
+                              placeholder="Pull request title..."
+                              className="w-full rounded-md border border-white/[0.1] bg-black/50 px-2.5 py-1.5 text-xs text-zinc-200 focus:border-cyan-300/50 focus:outline-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[11px] text-zinc-400 mb-1 font-medium">
+                              PR Description
+                            </label>
+                            <textarea
+                              rows={4}
+                              value={prBodyInput}
+                              onChange={(e) => setPrBodyInput(e.target.value)}
+                              placeholder="Pull request description..."
+                              className="w-full rounded-md border border-white/[0.1] bg-black/50 px-2.5 py-1.5 text-xs text-zinc-200 font-mono focus:border-cyan-300/50 focus:outline-none leading-relaxed"
+                            />
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-end gap-2 pt-1">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setIsConfirmingCreatePR(false)}
+                            className="h-7 text-xs text-zinc-400 hover:text-zinc-200"
+                          >
+                            Cancel
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={handleCreatePR}
+                            disabled={!prTitleInput.trim()}
+                            className="h-7 text-xs bg-cyan-300 text-black hover:bg-cyan-200 font-medium"
+                          >
+                            <Check className="size-3.5 mr-1" />
+                            Create Pull Request
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Step 5 Loading: Creating Pull Request... */}
+                    {isCreatingPR && (
+                      <div className="rounded-lg border border-purple-500/20 bg-purple-950/20 p-3.5 flex items-center gap-3 text-xs text-purple-200 animate-in fade-in duration-150">
+                        <Loader2 className="size-4 animate-spin text-purple-300" />
+                        <span>Creating Pull Request...</span>
+                      </div>
+                    )}
+
+                    {/* Create PR Error */}
+                    {createPRError && (
+                      <div
+                        className={`rounded-lg border p-3.5 text-xs flex items-start gap-2.5 animate-in fade-in duration-150 ${
+                          createPRError.isQuota
+                            ? "border-amber-500/30 bg-amber-500/10 text-amber-200"
+                            : "border-rose-500/20 bg-rose-500/10 text-rose-300"
+                        }`}
+                      >
+                        <AlertCircle
+                          className={`size-4 shrink-0 mt-0.5 ${
+                            createPRError.isQuota ? "text-amber-400" : "text-rose-400"
+                          }`}
+                        />
+                        <div className="space-y-0.5">
+                          {createPRError.title && (
+                            <div className="font-semibold text-white">
+                              {createPRError.title}
+                            </div>
+                          )}
+                          <div className="leading-relaxed">
+                            {createPRError.message}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Step 5 Success: Pull Request created */}
+                    {createPRResult && (
+                      <div className="rounded-lg border border-emerald-500/30 bg-emerald-950/20 p-3.5 space-y-3 text-xs animate-in fade-in duration-150">
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex items-center gap-2 text-emerald-300 font-semibold">
+                            <CircleCheck className="size-4 text-emerald-400 shrink-0" />
+                            <span>Pull Request created</span>
+                          </div>
+                          <span className="font-mono font-semibold text-emerald-400">
+                            #{createPRResult.pull_request_number}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 font-mono text-[11px] bg-black/40 p-2.5 rounded border border-white/[0.06]">
+                          <div>
+                            <span className="text-zinc-500">PR: </span>
+                            <span className="text-zinc-200">#{createPRResult.pull_request_number}</span>
+                          </div>
+                          <div>
+                            <span className="text-zinc-500">Branch: </span>
+                            <span className="text-zinc-200">{createPRResult.branch_name}</span>
+                          </div>
+                          <div>
+                            <span className="text-zinc-500">Base: </span>
+                            <span className="text-zinc-200">{createPRResult.base_branch}</span>
+                          </div>
+                        </div>
+
+                        <div className="pt-1 flex justify-end">
+                          <Button
+                            size="sm"
+                            onClick={() =>
+                              window.open(
+                                createPRResult.pull_request_url,
+                                "_blank",
+                                "noopener,noreferrer"
+                              )
+                            }
+                            className="h-7 text-xs bg-emerald-500 text-black hover:bg-emerald-400 font-medium"
+                          >
+                            <ExternalLink className="size-3.5 mr-1.5" />
+                            Open Pull Request
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>

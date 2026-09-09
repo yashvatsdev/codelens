@@ -1,6 +1,8 @@
 import type {
   AIPRReviewResponse,
   AnalysisSummaryResponse,
+  ApplyFixBranchResponse,
+  CreatePRFromBranchResponse,
   FindingExplanationResponse,
   FindingFixResponse,
   FindingResponse,
@@ -42,6 +44,28 @@ export function getFriendlyErrorMessage(
 ): FriendlyError {
   if (err instanceof ApiError) {
     const rawMsg = typeof err.message === "string" ? err.message : "";
+    const cleaned = (rawMsg || defaultMessage)
+      .replace(/gemini/gi, "AI")
+      .replace(/google/gi, "AI")
+      .replace(/bearer\s+[a-zA-Z0-9_\-]+/gi, "[REDACTED]")
+      .replace(/token\s+[a-zA-Z0-9_\-]+/gi, "[REDACTED]");
+
+    if (err.status === 409) {
+      return {
+        title: "Pull Request already exists",
+        message: "A Pull Request already exists for this fix branch.",
+        isQuota: false,
+      };
+    }
+
+    if (err.status === 404) {
+      return {
+        title: "Not found",
+        message: cleaned || "The requested resource, repository, or branch was not found.",
+        isQuota: false,
+      };
+    }
+
     const isQuota =
       err.status === 429 ||
       err.code === "AI_QUOTA_EXCEEDED" ||
@@ -51,19 +75,31 @@ export function getFriendlyErrorMessage(
       rawMsg.toLowerCase().includes("too many requests");
 
     if (isQuota) {
+      const isGitHubRateLimit =
+        rawMsg.toLowerCase().includes("github") ||
+        rawMsg.toLowerCase().includes("rate limit");
       return {
         title: "AI quota temporarily exhausted",
         message:
           "CodeLens has reached its current AI usage limit. Static analysis is still available. Please try again later.",
+        title: isGitHubRateLimit ? "Rate limit exceeded" : "AI quota temporarily exhausted",
+        message: isGitHubRateLimit
+          ? "GitHub API rate limit exceeded. Please try again later."
+          : "CodeLens has reached its current AI usage limit. Static analysis is still available. Please try again later.",
         isQuota: true,
       };
     }
 
     if (err.status === 502 || err.status === 503) {
+      const isGitHub = rawMsg.toLowerCase().includes("github");
       return {
         title: "AI service unavailable",
         message:
           "AI service is currently unavailable. Static analysis is still available. Please try again later.",
+        title: isGitHub ? "GitHub unavailable" : "Service unavailable",
+        message: isGitHub
+          ? "GitHub service is temporarily unavailable. Please check your GitHub token or try again later."
+          : "Service is currently unavailable. Please try again later.",
         isQuota: false,
       };
     }
@@ -82,6 +118,9 @@ export function getFriendlyErrorMessage(
     const cleaned = err.message
       .replace(/gemini/gi, "AI")
       .replace(/google/gi, "AI");
+      .replace(/google/gi, "AI")
+      .replace(/bearer\s+[a-zA-Z0-9_\-]+/gi, "[REDACTED]")
+      .replace(/token\s+[a-zA-Z0-9_\-]+/gi, "[REDACTED]");
     return {
       message: cleaned,
       isQuota: false,
@@ -217,6 +256,32 @@ export const api = {
       {
         method: "POST",
         body: JSON.stringify(payload),
+      },
+    ),
+  applyFixToBranch: (repositoryId: number, findingId: number) =>
+    request<ApplyFixBranchResponse>(
+      `/repositories/${repositoryId}/findings/${findingId}/apply-fix`,
+      {
+        method: "POST",
+        body: JSON.stringify({}),
+      },
+    ),
+  createPRFromBranch: (
+    repositoryId: number,
+    findingId: number,
+    branchName: string,
+    title?: string,
+    body?: string,
+  ) =>
+    request<CreatePRFromBranchResponse>(
+      `/repositories/${repositoryId}/findings/${findingId}/create-pr`,
+      {
+        method: "POST",
+        body: JSON.stringify({
+          branch_name: branchName,
+          title: title || undefined,
+          body: body || undefined,
+        }),
       },
     ),
 };

@@ -30,6 +30,7 @@ from app.main import app
 from app.models.finding import Finding
 from app.models.repository import Repository
 from app.models.source_file import SourceFile
+from app.schemas.finding import ApplyFixBranchResponse, FindingFixResponse
 from app.schemas.finding import (
     ApplyFixBranchResponse,
     CreatePRFromBranchRequest,

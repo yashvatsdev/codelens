@@ -143,6 +143,7 @@ def _authenticated_github_request(
             ) from err
         detail_msg = f"{err.reason} {err_body}".strip() if err_body else str(err.reason)
         raise GitHubAPIError(
+            f"GitHub API returned error {err.code}: {err.reason}"
             f"GitHub API returned error {err.code}: {detail_msg}"
         ) from err
     except urllib.error.URLError as err:

@@ -139,3 +139,36 @@ export interface PRFindingFixResponse {
   resulting_code?: string | null;
 }
 
+export interface ApplyFixBranchRequest {
+  commit_message?: string;
+  branch_name?: string;
+}
+
+export interface ApplyFixBranchResponse {
+  repository_id: number;
+  finding_id: number;
+  branch_name: string;
+  commit_sha: string;
+  commit_url?: string;
+  file_path: string;
+  message: string;
+}
+
+export interface CreatePRFromBranchRequest {
+  branch_name: string;
+  title?: string;
+  body?: string;
+}
+
+export interface CreatePRFromBranchResponse {
+  repository_id: number;
+  finding_id: number;
+  pull_request_number: number;
+  pull_request_url: string;
+  branch_name: string;
+  base_branch: string;
+  title: string;
+  message: string;
+}
+
+
