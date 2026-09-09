@@ -136,3 +136,20 @@ class PRCommentResponse(BaseModel):
     findings_posted: int
 
 
+class ApplyFixBranchRequest(BaseModel):
+    """Optional request payload for applying an AI fix to a GitHub branch."""
+    commit_message: str | None = Field(default=None, description="Optional custom commit message")
+    branch_name: str | None = Field(default=None, description="Optional custom branch name")
+
+
+class ApplyFixBranchResponse(BaseModel):
+    """Response returned after applying an AI fix to a new GitHub branch."""
+    repository_id: int
+    finding_id: int
+    branch_name: str
+    commit_sha: str
+    commit_url: str | None = None
+    file_path: str
+    message: str = "AI fix applied successfully to GitHub branch."
+
+

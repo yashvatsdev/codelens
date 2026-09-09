@@ -10,6 +10,8 @@ from app.models.source_file import SourceFile
 from app.schemas.finding import (
     AIPRReviewResponse,
     AnalysisSummaryResponse,
+    ApplyFixBranchRequest,
+    ApplyFixBranchResponse,
     FindingExplanationResponse,
     FindingFixResponse,
     FindingResponse,
@@ -72,6 +74,13 @@ from app.services.pr_commenter import (
     GitHubCredentialsUnavailableError,
     PRCommenterError,
     create_pr_review_comment,
+)
+from app.services.branch_fixer import (
+    BranchCommitFailedError,
+    BranchFixerError,
+    GitHubCredentialsUnavailableError as BranchFixerCredentialsUnavailableError,
+    UnchangedFixError,
+    apply_ai_fix_to_github_branch,
 )
 from app.core.ai_errors import (
     AIQuotaExceededError,
@@ -577,6 +586,132 @@ def generate_test_for_finding_endpoint(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=sanitize_ai_error(e),
         )
+
+
+@router.post(
+    "/{repository_id}/findings/{finding_id}/apply-fix",
+    response_model=ApplyFixBranchResponse,
+)
+def apply_fix_to_branch_endpoint(
+    repository_id: int,
+    finding_id: int,
+    payload: ApplyFixBranchRequest | None = None,
+    db: Session = Depends(get_db),
+):
+    """Apply an AI-generated fix for a finding to a newly created GitHub branch.
+
+    1. Validates that the repository exists.
+    2. Validates that the finding exists and belongs to that repository.
+    3. Loads the relevant source file.
+    4. Generates the AI fix using the existing fixer service.
+    5. Applies the fix in memory using existing apply_fix_to_content logic.
+    6. Rejects unchanged content with a clear error without creating a branch.
+    7. Fetches the repository's current default branch and HEAD SHA.
+    8. Creates a unique branch: codelens/fix/finding-{finding_id}-{short_id}.
+    9. Commits the modified file to the new branch.
+    10. Leaves the default branch untouched.
+    """
+    repository = db.get(Repository, repository_id)
+    if not repository:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Repository with id {repository_id} not found",
+        )
+
+    finding = db.get(Finding, finding_id)
+    if not finding or finding.repository_id != repository_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Finding with id {finding_id} not found for repository {repository_id}",
+        )
+
+    if not finding.file_path:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Finding {finding_id} does not specify a file path",
+        )
+
+    source_file = db.execute(
+        select(SourceFile).where(
+            SourceFile.repository_id == repository.id,
+            SourceFile.path == finding.file_path,
+        )
+    ).scalar_one_or_none()
+
+    if not source_file:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Source file '{finding.file_path}' not found for repository {repository_id}",
+        )
+
+    if not settings.gemini_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Gemini API is not configured (missing GEMINI_API_KEY)",
+        )
+
+    if not settings.github_token:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="GitHub credentials are unavailable (missing GITHUB_TOKEN)",
+        )
+
+    commit_msg = payload.commit_message if payload else None
+    b_name = payload.branch_name if payload else None
+
+    try:
+        return apply_ai_fix_to_github_branch(
+            repository=repository,
+            finding=finding,
+            source_file=source_file,
+            commit_message=commit_msg,
+            branch_name=b_name,
+        )
+    except UnchangedFixError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e),
+        )
+    except BranchFixerCredentialsUnavailableError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(e),
+        )
+    except GitHubRateLimitError as e:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=str(e),
+        )
+    except GitHubRepoNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except BranchCommitFailedError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(e),
+        )
+    except GitHubAPIError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(e),
+        )
+    except AIQuotaExceededError as e:
+        raise e
+    except FixerError as e:
+        if is_ai_quota_error(e):
+            raise AIQuotaExceededError() from e
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=sanitize_ai_error(e),
+        )
+    except BranchFixerError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(e),
+        )
+
 
 
 @router.post(
