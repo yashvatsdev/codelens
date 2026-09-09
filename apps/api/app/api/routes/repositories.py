@@ -14,6 +14,8 @@ from app.schemas.finding import (
     FindingFixResponse,
     FindingResponse,
     FindingTestResponse,
+    PRCommentRequest,
+    PRCommentResponse,
     PRFindingFixRequest,
     PRFindingFixResponse,
     PRReviewResponse,
@@ -65,6 +67,11 @@ from app.services.ai_pr_fixer import (
     AIPRFixerError,
     GeminiNotConfiguredError as AIPRFixerGeminiNotConfiguredError,
     generate_pr_finding_fix,
+)
+from app.services.pr_commenter import (
+    GitHubCredentialsUnavailableError,
+    PRCommenterError,
+    create_pr_review_comment,
 )
 
 router = APIRouter(prefix="/repositories", tags=["repositories"])
@@ -762,5 +769,59 @@ def fix_pr_finding_endpoint(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=str(e),
         )
+
+
+@router.post(
+    "/{repository_id}/pull-requests/{pull_request_number}/comment",
+    response_model=PRCommentResponse,
+)
+def comment_pull_request_endpoint(
+    repository_id: int,
+    pull_request_number: int,
+    payload: PRCommentRequest = PRCommentRequest(),
+    db: Session = Depends(get_db),
+):
+    """Post an AI-powered code review comment to a GitHub Pull Request.
+
+    Runs diff-aware PR analysis, builds a formatted Markdown review comment,
+    and posts it to the GitHub PR timeline using authenticated credentials.
+
+    Does not modify repository contents, commits, branches, or database records.
+    """
+    repository = db.get(Repository, repository_id)
+    if not repository:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Repository with id {repository_id} not found",
+        )
+
+    try:
+        return create_pr_review_comment(
+            repository=repository,
+            pull_request_number=pull_request_number,
+            summary=payload.summary,
+            include_findings=payload.include_findings,
+        )
+    except GitHubCredentialsUnavailableError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(e),
+        )
+    except (PRNotFoundError, GitHubRepoNotFoundError) as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )
+    except GitHubRateLimitError as e:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=str(e),
+        )
+    except (GitHubServiceError, PRCommenterError) as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(e),
+        )
+
 
 

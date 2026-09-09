@@ -119,3 +119,20 @@ class PRFindingFixResponse(BaseModel):
     diff: str | None = None
     resulting_code: str | None = None
 
+
+class PRCommentRequest(BaseModel):
+    """Request payload for posting a PR review comment to GitHub."""
+    summary: str | None = Field(default=None, description="Optional custom review summary")
+    include_findings: bool = Field(default=True, description="Whether to include detailed key findings in the comment")
+
+
+class PRCommentResponse(BaseModel):
+    """Response returned after posting a PR review comment to GitHub."""
+    repository_id: int
+    pull_request_number: int
+    comment_id: int | str
+    comment_url: str | None = None
+    risk_level: str
+    findings_posted: int
+
+
