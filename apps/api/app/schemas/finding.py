@@ -48,3 +48,12 @@ class FindingFixResponse(BaseModel):
     resulting_code: str | None = None
 
 
+class FindingTestResponse(BaseModel):
+    finding_id: int
+    test_framework: str
+    test_file: str
+    test_code: str
+    explanation: str
+
+
+

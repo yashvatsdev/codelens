@@ -5,6 +5,7 @@ from app.schemas.finding import (
     FindingExplanationResponse,
     FindingFixResponse,
     FindingResponse,
+    FindingTestResponse,
 )
 from app.schemas.repository import (
     GitHubMetadataRequest,
@@ -26,6 +27,7 @@ __all__ = [
     "FindingExplanationResponse",
     "FindingFixResponse",
     "FindingResponse",
+    "FindingTestResponse",
     "GitHubMetadataRequest",
     "GitHubMetadataResponse",
     "GitHubRepositoryCreate",
