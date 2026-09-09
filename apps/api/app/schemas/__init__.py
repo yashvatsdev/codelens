@@ -1,4 +1,6 @@
 from app.schemas.finding import (
+    AIPRKeyFindingResponse,
+    AIPRReviewResponse,
     AnalysisSummaryResponse,
     FindingBase,
     FindingCreate,
@@ -23,6 +25,8 @@ from app.schemas.repository import (
 )
 
 __all__ = [
+    "AIPRKeyFindingResponse",
+    "AIPRReviewResponse",
     "AnalysisSummaryResponse",
     "FindingBase",
     "FindingCreate",

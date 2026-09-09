@@ -8,6 +8,7 @@ from app.models.finding import Finding
 from app.models.repository import Repository
 from app.models.source_file import SourceFile
 from app.schemas.finding import (
+    AIPRReviewResponse,
     AnalysisSummaryResponse,
     FindingExplanationResponse,
     FindingFixResponse,
@@ -52,6 +53,11 @@ from app.services.ingestion import ingest_repository
 from app.services.pr_reviewer import (
     PRNotFoundError,
     review_pull_request,
+)
+from app.services.ai_pr_reviewer import (
+    AIPRReviewerError,
+    GeminiNotConfiguredError as AIPRGeminiNotConfiguredError,
+    generate_ai_pr_review,
 )
 
 router = APIRouter(prefix="/repositories", tags=["repositories"])
@@ -589,3 +595,73 @@ def review_pull_request_endpoint(
         )
 
     return result
+
+
+@router.post(
+    "/{repository_id}/pull-requests/{pull_request_number}/ai-review",
+    response_model=AIPRReviewResponse,
+)
+def ai_review_pull_request_endpoint(
+    repository_id: int,
+    pull_request_number: int,
+    db: Session = Depends(get_db),
+):
+    """Perform an AI-powered code review of a GitHub Pull Request using Google Gemini.
+
+    Reuses Phase 1 PR review to fetch changed files and run static analysis,
+    then generates an intelligent review with risk assessment, key findings, and recommendations.
+
+    Nothing is written to the database.
+    """
+    repository = db.get(Repository, repository_id)
+    if not repository:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Repository with id {repository_id} not found",
+        )
+
+    if not settings.gemini_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Gemini API is not configured (missing GEMINI_API_KEY)",
+        )
+
+    try:
+        review_result = review_pull_request(
+            owner=repository.owner,
+            repo=repository.name,
+            pr_number=pull_request_number,
+            repository_id=repository.id,
+        )
+    except PRNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Pull request #{pull_request_number} not found: {e}",
+        )
+    except GitHubRateLimitError as e:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=str(e),
+        )
+    except GitHubServiceError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(e),
+        )
+
+    try:
+        return generate_ai_pr_review(
+            review_result=review_result,
+            repo_full_name=repository.full_name,
+        )
+    except AIPRGeminiNotConfiguredError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(e),
+        )
+    except AIPRReviewerError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(e),
+        )
+

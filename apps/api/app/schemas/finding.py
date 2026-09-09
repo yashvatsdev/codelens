@@ -73,3 +73,23 @@ class PRReviewResponse(BaseModel):
     files_changed: int
     files_analyzed: int
     findings: list[PRFindingResponse] = []
+
+
+class AIPRKeyFindingResponse(BaseModel):
+    """A single AI-analyzed key finding from a PR review."""
+    file_path: str
+    line_number: int | None = None
+    severity: str = Field(..., description="Finding severity (e.g. error, warning, info)")
+    category: str = Field(..., description="Finding category (e.g. security, bug, style)")
+    issue: str = Field(..., description="Clear description of what is wrong")
+    impact: str = Field(..., description="Why this matters and potential consequences")
+    recommendation: str = Field(..., description="Specific actionable fix recommendation")
+
+
+class AIPRReviewResponse(BaseModel):
+    """Structured AI-powered PR review response."""
+    summary: str = Field(..., description="Brief summary of the PR review")
+    risk_level: str = Field(..., description="Overall risk level: low, medium, high, or critical")
+    overall_assessment: str = Field(..., description="Detailed overall assessment")
+    key_findings: list[AIPRKeyFindingResponse] = []
+    recommendations: list[str] = []

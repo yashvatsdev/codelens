@@ -67,6 +67,10 @@ class PRReviewResult:
     findings: list[PRFinding] = field(default_factory=list)
     skipped_files: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+    # File contents fetched during review, keyed by file path.
+    # Used by the AI PR reviewer to provide source context to Gemini.
+    # Not serialized in the Phase 1 API response (PRReviewResponse schema excludes it).
+    file_contents: dict[str, str] = field(default_factory=dict)
 
 
 def _github_api_request(url: str, timeout: int = 15) -> dict | list:
@@ -255,6 +259,9 @@ def review_pull_request(
                     rule_id=rf["rule_id"],
                 )
             )
+
+        # Store file content for potential AI review (not serialized in Phase 1 response)
+        result.file_contents[cf.filename] = content
 
         result.files_analyzed += 1
 
