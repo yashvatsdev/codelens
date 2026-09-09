@@ -542,13 +542,34 @@ class TestAIPRReviewEndpoint(unittest.TestCase):
             files_changed=1,
             files_analyzed=1,
         )
-        mock_ai_review.side_effect = AIPRReviewerError("Gemini quota exceeded")
+        mock_ai_review.side_effect = AIPRReviewerError("Service connection failed")
 
         with patch.object(settings, "gemini_api_key", "mock-key"):
             response = self.client.post(f"/repositories/{repo.id}/pull-requests/1/ai-review")
             self.assertEqual(response.status_code, 502)
             data = response.json()
-            self.assertIn("Gemini quota exceeded", data["detail"])
+            self.assertIn("Service connection failed", data["detail"])
+
+    @patch("app.api.routes.repositories.generate_ai_pr_review")
+    @patch("app.api.routes.repositories.review_pull_request")
+    def test_ai_quota_exceeded_returns_429(self, mock_review, mock_ai_review):
+        repo = self._create_repo()
+        mock_review.return_value = PRReviewResult(
+            repository_id=repo.id,
+            pull_request_number=1,
+            files_changed=1,
+            files_analyzed=1,
+        )
+        mock_ai_review.side_effect = AIPRReviewerError("429 RESOURCE_EXHAUSTED: Quota exceeded for metric")
+
+        with patch.object(settings, "gemini_api_key", "mock-key"):
+            response = self.client.post(f"/repositories/{repo.id}/pull-requests/1/ai-review")
+            self.assertEqual(response.status_code, 429)
+            data = response.json()
+            self.assertEqual(data["code"], "AI_QUOTA_EXCEEDED")
+            self.assertIn("AI quota temporarily exhausted", data["message"])
+            self.assertNotIn("gemini", json.dumps(data).lower())
+            self.assertNotIn("resource_exhausted", json.dumps(data).lower())
 
     @patch("google.genai.Client")
     @patch("app.api.routes.repositories.review_pull_request")

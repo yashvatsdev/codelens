@@ -73,6 +73,11 @@ from app.services.pr_commenter import (
     PRCommenterError,
     create_pr_review_comment,
 )
+from app.core.ai_errors import (
+    AIQuotaExceededError,
+    is_ai_quota_error,
+    sanitize_ai_error,
+)
 
 router = APIRouter(prefix="/repositories", tags=["repositories"])
 
@@ -427,10 +432,14 @@ def explain_repository_finding(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(e),
         )
+    except AIQuotaExceededError as e:
+        raise e
     except ExplainerError as e:
+        if is_ai_quota_error(e):
+            raise AIQuotaExceededError() from e
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=str(e),
+            detail=sanitize_ai_error(e),
         )
 
 
@@ -491,10 +500,14 @@ def fix_repository_finding_endpoint(
             finding=finding,
             source_content=source_file.content,
         )
+    except AIQuotaExceededError as e:
+        raise e
     except FixerError as e:
+        if is_ai_quota_error(e):
+            raise AIQuotaExceededError() from e
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=str(e),
+            detail=sanitize_ai_error(e),
         )
 
 
@@ -555,10 +568,14 @@ def generate_test_for_finding_endpoint(
             finding=finding,
             source_content=source_file.content,
         )
+    except AIQuotaExceededError as e:
+        raise e
     except TestGeneratorError as e:
+        if is_ai_quota_error(e):
+            raise AIQuotaExceededError() from e
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=str(e),
+            detail=sanitize_ai_error(e),
         )
 
 
@@ -673,10 +690,14 @@ def ai_review_pull_request_endpoint(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(e),
         )
+    except AIQuotaExceededError as e:
+        raise e
     except AIPRReviewerError as e:
+        if is_ai_quota_error(e):
+            raise AIQuotaExceededError() from e
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=str(e),
+            detail=sanitize_ai_error(e),
         )
 
 
@@ -764,10 +785,14 @@ def fix_pr_finding_endpoint(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=str(e),
         )
+    except AIQuotaExceededError as e:
+        raise e
     except AIPRFixerError as e:
+        if is_ai_quota_error(e):
+            raise AIQuotaExceededError() from e
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
-            detail=str(e),
+            detail=sanitize_ai_error(e),
         )
 
 

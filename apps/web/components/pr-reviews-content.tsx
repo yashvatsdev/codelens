@@ -24,7 +24,12 @@ import {
   TerminalSquare,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { api, ApiError } from "@/lib/api";
+import {
+  api,
+  ApiError,
+  getFriendlyErrorMessage,
+  type FriendlyError,
+} from "@/lib/api";
 import type {
   AIPRKeyFinding,
   AIPRReviewResponse,
@@ -127,7 +132,7 @@ export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
   );
   const [prNumberInput, setPrNumberInput] = useState<string>("");
   const [isLoading, setIsLoading] = useState(false);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [reviewError, setReviewError] = useState<FriendlyError | null>(null);
   const [reviewResult, setReviewResult] = useState<AIPRReviewResponse | null>(
     null,
   );
@@ -155,25 +160,32 @@ export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
         : parseInt(prNumberInput.trim(), 10);
 
     if (!selectedRepoId) {
-      setErrorMessage("Please select a repository to review.");
+      setReviewError({
+        message: "Please select a repository to review.",
+        isQuota: false,
+      });
       return;
     }
 
     if (isNaN(prNum) || prNum <= 0) {
-      setErrorMessage(
-        "Please enter a valid positive Pull Request number (e.g. 12).",
-      );
+      setReviewError({
+        message: "Please enter a valid positive Pull Request number (e.g. 12).",
+        isQuota: false,
+      });
       return;
     }
 
     const repoObj = repositories.find((r) => r.id === selectedRepoId);
     if (!repoObj) {
-      setErrorMessage("Selected repository not found.");
+      setReviewError({
+        message: "Selected repository not found.",
+        isQuota: false,
+      });
       return;
     }
 
     setIsLoading(true);
-    setErrorMessage(null);
+    setReviewError(null);
     setFixResults({});
     setFixErrors({});
     setFixingKeys({});
@@ -192,10 +204,11 @@ export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
         repoId: repoObj.id,
       });
     } catch (err) {
-      setErrorMessage(
-        err instanceof ApiError
-          ? err.message
-          : "Failed to perform AI Pull Request review. Please try again.",
+      setReviewError(
+        getFriendlyErrorMessage(
+          err,
+          "Failed to perform AI Pull Request review. Please try again.",
+        ),
       );
     } finally {
       setIsLoading(false);
@@ -227,12 +240,15 @@ export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
       );
       setFixResults((prev) => ({ ...prev, [key]: res }));
     } catch (err) {
+      const friendly = getFriendlyErrorMessage(
+        err,
+        "Failed to generate AI fix for this finding.",
+      );
       setFixErrors((prev) => ({
         ...prev,
-        [key]:
-          err instanceof ApiError
-            ? err.message
-            : "Failed to generate AI fix for this finding.",
+        [key]: friendly.title
+          ? `${friendly.title}: ${friendly.message}`
+          : friendly.message,
       }));
     } finally {
       setFixingKeys((prev) => ({ ...prev, [key]: false }));
@@ -263,8 +279,7 @@ export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
         </h2>
         <p className="mt-2 max-w-xl text-sm leading-6 text-zinc-500">
           Run automated senior-engineer AI reviews on GitHub Pull Requests.
-          Analyzes only changed files with CodeLens static analysis and Google
-          Gemini.
+          Analyzes only changed files with CodeLens static analysis and AI.
         </p>
       </div>
 
@@ -290,7 +305,7 @@ export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
               onChange={(e) => {
                 const val = e.target.value;
                 setSelectedRepoId(val ? Number(val) : "");
-                setErrorMessage(null);
+                setReviewError(null);
               }}
               disabled={isLoading || repositories.length === 0}
               className="w-full rounded-lg border border-white/[0.1] bg-black/40 px-3 py-2 text-sm text-zinc-200 transition focus:border-cyan-300/50 focus:outline-none focus:ring-1 focus:ring-cyan-300/50 disabled:opacity-50"
@@ -332,7 +347,7 @@ export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
                 value={prNumberInput}
                 onChange={(e) => {
                   setPrNumberInput(e.target.value);
-                  setErrorMessage(null);
+                  setReviewError(null);
                 }}
                 disabled={isLoading}
                 onKeyDown={(e) => {
@@ -371,15 +386,40 @@ export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
         </div>
 
         {/* Validation or API Error Alert */}
-        {errorMessage && (
-          <div className="mt-4 rounded-lg border border-rose-500/20 bg-rose-500/10 p-3.5 text-xs text-rose-300 flex items-start justify-between gap-3 animate-in fade-in duration-150">
-            <div className="flex items-start gap-2.5">
-              <AlertCircle className="size-4 shrink-0 mt-0.5 text-rose-400" />
-              <div className="leading-relaxed">{errorMessage}</div>
+        {reviewError && (
+          <div
+            className={`mt-4 rounded-lg border p-4 text-xs flex items-start justify-between gap-3 animate-in fade-in duration-150 ${
+              reviewError.isQuota
+                ? "border-amber-500/30 bg-amber-500/10 text-amber-200"
+                : "border-rose-500/20 bg-rose-500/10 text-rose-300"
+            }`}
+          >
+            <div className="flex items-start gap-3">
+              <AlertCircle
+                className={`size-4 shrink-0 mt-0.5 ${
+                  reviewError.isQuota ? "text-amber-400" : "text-rose-400"
+                }`}
+              />
+              <div className="space-y-1">
+                {reviewError.title && (
+                  <div className="text-sm font-semibold tracking-tight text-white">
+                    {reviewError.title}
+                  </div>
+                )}
+                <p
+                  className={`leading-relaxed ${
+                    reviewError.isQuota
+                      ? "text-amber-200/90"
+                      : "text-rose-300/90"
+                  }`}
+                >
+                  {reviewError.message}
+                </p>
+              </div>
             </div>
             <button
-              onClick={() => setErrorMessage(null)}
-              className="text-rose-400/70 hover:text-rose-300 text-xs font-mono"
+              onClick={() => setReviewError(null)}
+              className="text-zinc-400 hover:text-zinc-200 text-xs font-mono shrink-0"
             >
               Dismiss
             </button>
@@ -398,8 +438,8 @@ export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
           </h4>
           <p className="mt-2 text-xs text-zinc-500 max-w-md mx-auto leading-relaxed">
             Fetching changed files from GitHub, executing CodeLens static
-            analyzers, and consulting Google Gemini for high-level risk
-            evaluation and recommendations.
+            analyzers, and consulting AI for high-level risk evaluation and
+            recommendations.
           </p>
           <div className="mt-6 flex items-center justify-center gap-2 text-[11px] font-mono text-zinc-600">
             <span className="inline-block size-1.5 rounded-full bg-cyan-400 animate-ping" />
@@ -669,9 +709,7 @@ export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
                           {isFixing && (
                             <div className="rounded-lg border border-purple-500/20 bg-purple-500/5 p-3.5 flex items-center justify-center gap-2.5 text-xs text-purple-300 animate-in fade-in duration-150">
                               <Loader2 className="size-4 animate-spin text-purple-400" />
-                              <span>
-                                Generating AI fix with Google Gemini...
-                              </span>
+                              <span>Generating AI fix...</span>
                             </div>
                           )}
 
@@ -955,7 +993,7 @@ export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
             Select one of your connected GitHub repositories, enter the PR
             number you wish to evaluate, and click{" "}
             <strong>Run AI Review</strong> to trigger in-memory static code
-            analysis and Gemini-powered insights.
+            analysis and AI-powered insights.
           </p>
 
           <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-2xl mx-auto text-left">
@@ -983,7 +1021,7 @@ export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
                 Senior Review
               </h5>
               <p className="text-[11px] text-zinc-500 mt-1 leading-normal">
-                Grounded Gemini assessment focusing on security, bugs, and
+                Grounded AI assessment focusing on security, bugs, and
                 remediations.
               </p>
             </div>

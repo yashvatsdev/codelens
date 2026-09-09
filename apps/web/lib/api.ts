@@ -19,13 +19,79 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
 export class ApiError extends Error {
   status: number;
   data: unknown;
+  code?: string;
 
-  constructor(message: string, status: number, data?: unknown) {
+  constructor(message: string, status: number, data?: unknown, code?: string) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.data = data;
+    this.code = code;
   }
+}
+
+export interface FriendlyError {
+  title?: string;
+  message: string;
+  isQuota: boolean;
+}
+
+export function getFriendlyErrorMessage(
+  err: unknown,
+  defaultMessage = "An unexpected error occurred. Please try again.",
+): FriendlyError {
+  if (err instanceof ApiError) {
+    const rawMsg = typeof err.message === "string" ? err.message : "";
+    const isQuota =
+      err.status === 429 ||
+      err.code === "AI_QUOTA_EXCEEDED" ||
+      rawMsg.toLowerCase().includes("quota") ||
+      rawMsg.toLowerCase().includes("resource_exhausted") ||
+      rawMsg.toLowerCase().includes("rate limit") ||
+      rawMsg.toLowerCase().includes("too many requests");
+
+    if (isQuota) {
+      return {
+        title: "AI quota temporarily exhausted",
+        message:
+          "CodeLens has reached its current AI usage limit. Static analysis is still available. Please try again later.",
+        isQuota: true,
+      };
+    }
+
+    if (err.status === 502 || err.status === 503) {
+      return {
+        title: "AI service unavailable",
+        message:
+          "AI service is currently unavailable. Static analysis is still available. Please try again later.",
+        isQuota: false,
+      };
+    }
+
+    const cleaned = (rawMsg || defaultMessage)
+      .replace(/gemini/gi, "AI")
+      .replace(/google/gi, "AI");
+
+    return {
+      message: cleaned,
+      isQuota: false,
+    };
+  }
+
+  if (err instanceof Error) {
+    const cleaned = err.message
+      .replace(/gemini/gi, "AI")
+      .replace(/google/gi, "AI");
+    return {
+      message: cleaned,
+      isQuota: false,
+    };
+  }
+
+  return {
+    message: defaultMessage,
+    isQuota: false,
+  };
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -41,18 +107,32 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
     if (!response.ok) {
       let errorDetail = `Request failed with status ${response.status}`;
+      let errorCode: string | undefined = undefined;
+      let errorData: unknown = undefined;
       try {
         const errorJson = await response.json();
+        errorData = errorJson;
         if (errorJson.detail) {
-          errorDetail =
-            typeof errorJson.detail === "string"
-              ? errorJson.detail
-              : JSON.stringify(errorJson.detail);
+          if (typeof errorJson.detail === "string") {
+            errorDetail = errorJson.detail;
+          } else if (
+            typeof errorJson.detail === "object" &&
+            errorJson.detail !== null
+          ) {
+            errorDetail =
+              errorJson.detail.message || JSON.stringify(errorJson.detail);
+            errorCode = errorJson.detail.code;
+          }
+        } else if (errorJson.message) {
+          errorDetail = errorJson.message;
+        }
+        if (errorJson.code) {
+          errorCode = errorJson.code;
         }
       } catch {
         // use fallback errorDetail
       }
-      throw new ApiError(errorDetail, response.status);
+      throw new ApiError(errorDetail, response.status, errorData, errorCode);
     }
 
     return (await response.json()) as T;

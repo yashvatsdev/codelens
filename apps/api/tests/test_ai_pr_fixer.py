@@ -181,12 +181,31 @@ class TestAIPRFixerService(unittest.TestCase):
         self.assertEqual(result.line_number, 1)
 
     def test_gemini_api_error_raises_aiprfixererror(self):
-        """When Gemini client raises an exception, wrap in AIPRFixerError."""
+        """When Gemini client raises a generic exception, wrap in AIPRFixerError."""
         mock_client = MagicMock()
-        mock_client.models.generate_content.side_effect = RuntimeError("Quota exceeded")
+        mock_client.models.generate_content.side_effect = RuntimeError("Connection timeout")
 
         with patch.object(settings, "gemini_api_key", "mock-key"):
             with self.assertRaises(AIPRFixerError):
+                generate_pr_finding_fix(
+                    file_contents={"test.py": "x = 1\n"},
+                    file_path="test.py",
+                    line_number=1,
+                    issue="Test",
+                    severity="info",
+                    category="general",
+                    message="Test",
+                    gemini_client=mock_client,
+                )
+
+    def test_gemini_quota_error_raises_ai_quota_exceeded_error(self):
+        """When Gemini client raises a quota error, raise AIQuotaExceededError."""
+        from app.core.ai_errors import AIQuotaExceededError
+        mock_client = MagicMock()
+        mock_client.models.generate_content.side_effect = RuntimeError("429 RESOURCE_EXHAUSTED: Quota exceeded")
+
+        with patch.object(settings, "gemini_api_key", "mock-key"):
+            with self.assertRaises(AIQuotaExceededError):
                 generate_pr_finding_fix(
                     file_contents={"test.py": "x = 1\n"},
                     file_path="test.py",

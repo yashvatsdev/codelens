@@ -172,7 +172,10 @@ def explain_finding(
         )
     except Exception as exc:
         logger.error(f"Gemini API call failed: {exc}")
-        raise ExplainerError(f"Gemini API error: {exc}") from exc
+        from app.core.ai_errors import AIQuotaExceededError, is_ai_quota_error, sanitize_ai_error
+        if is_ai_quota_error(exc):
+            raise AIQuotaExceededError() from exc
+        raise ExplainerError(sanitize_ai_error(exc)) from exc
 
     raw_text = getattr(response, "text", "") or ""
     try:

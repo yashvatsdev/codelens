@@ -176,10 +176,11 @@ export function CodeLensDashboard() {
 
   // AI Test state for selected finding
   const [isGeneratingTest, setIsGeneratingTest] = useState(false);
-  const [testResult, setTestResult] = useState<FindingTestResponse | null>(null);
+  const [testResult, setTestResult] = useState<FindingTestResponse | null>(
+    null,
+  );
   const [testError, setTestError] = useState<string | null>(null);
   const [testCopied, setTestCopied] = useState(false);
-
 
   // Load repositories, findings, and health from backend
   const loadData = async () => {
@@ -328,7 +329,7 @@ export function CodeLensDashboard() {
       setFixError(
         err instanceof ApiError
           ? err.message
-          : "Failed to generate fix. Please check your Gemini API key and try again.",
+          : "Failed to generate fix. Please try again later.",
       );
     } finally {
       setIsGeneratingFix(false);
@@ -351,7 +352,7 @@ export function CodeLensDashboard() {
       setTestError(
         err instanceof ApiError
           ? err.message
-          : "Failed to generate test. Please check your Gemini API key and try again.",
+          : "Failed to generate test. Please try again later.",
       );
     } finally {
       setIsGeneratingTest(false);
@@ -898,7 +899,7 @@ export function CodeLensDashboard() {
               {isGeneratingTest && !testResult && (
                 <div className="rounded-lg border border-white/[0.06] bg-black/30 p-4 flex items-center gap-3 text-xs text-zinc-400 animate-in fade-in duration-150">
                   <Loader2 className="size-4 animate-spin text-purple-400" />
-                  <span>Generating targeted unit test with Gemini...</span>
+                  <span>Generating targeted unit test with AI...</span>
                 </div>
               )}
 
@@ -961,7 +962,6 @@ export function CodeLensDashboard() {
                   </div>
                 </div>
               )}
-
 
               {/* Fix result display */}
               {fixResult && (

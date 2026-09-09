@@ -138,7 +138,10 @@ def generate_test(
         )
     except Exception as exc:
         logger.error(f"Gemini API call for test generation failed: {exc}")
-        raise TestGeneratorError(f"Gemini API error: {exc}") from exc
+        from app.core.ai_errors import AIQuotaExceededError, is_ai_quota_error, sanitize_ai_error
+        if is_ai_quota_error(exc):
+            raise AIQuotaExceededError() from exc
+        raise TestGeneratorError(sanitize_ai_error(exc)) from exc
 
     raw_text = getattr(response, "text", "") or ""
     test_framework = "pytest" if (finding.file_path and finding.file_path.endswith(".py")) else "jest"

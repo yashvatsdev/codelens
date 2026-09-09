@@ -1,9 +1,10 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from app.api.routes import repositories
+from app.core.ai_errors import AIQuotaExceededError
 from app.db.database import engine
 
 app = FastAPI(
@@ -11,6 +12,22 @@ app = FastAPI(
     version="0.1.0",
     description="AI-powered code intelligence platform",
 )
+
+
+@app.exception_handler(AIQuotaExceededError)
+def ai_quota_exception_handler(request: Request, exc: AIQuotaExceededError):
+    return JSONResponse(
+        status_code=429,
+        content={
+            "code": exc.code,
+            "message": exc.message,
+            "detail": {
+                "code": exc.code,
+                "message": exc.message,
+            },
+        },
+    )
+
 
 app.add_middleware(
     CORSMiddleware,

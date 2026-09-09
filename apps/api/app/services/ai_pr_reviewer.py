@@ -279,7 +279,10 @@ def generate_ai_pr_review(
         )
     except Exception as exc:
         logger.error(f"Gemini API call for AI PR review failed: {exc}")
-        raise AIPRReviewerError(f"Gemini API error: {exc}") from exc
+        from app.core.ai_errors import AIQuotaExceededError, is_ai_quota_error, sanitize_ai_error
+        if is_ai_quota_error(exc):
+            raise AIQuotaExceededError() from exc
+        raise AIPRReviewerError(sanitize_ai_error(exc)) from exc
 
     # ---- Safe response parsing ----
     raw_text = getattr(response, "text", "") or ""

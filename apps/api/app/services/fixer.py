@@ -261,7 +261,10 @@ def generate_fix(
         )
     except Exception as exc:
         logger.error(f"Gemini API call for fix generation failed: {exc}")
-        raise FixerError(f"Gemini API error: {exc}") from exc
+        from app.core.ai_errors import AIQuotaExceededError, is_ai_quota_error, sanitize_ai_error
+        if is_ai_quota_error(exc):
+            raise AIQuotaExceededError() from exc
+        raise FixerError(sanitize_ai_error(exc)) from exc
 
     raw_text = getattr(response, "text", "") or ""
     explanation = ""
