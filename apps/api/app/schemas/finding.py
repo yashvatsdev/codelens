@@ -84,6 +84,10 @@ class AIPRKeyFindingResponse(BaseModel):
     issue: str = Field(..., description="Clear description of what is wrong")
     impact: str = Field(..., description="Why this matters and potential consequences")
     recommendation: str = Field(..., description="Specific actionable fix recommendation")
+    code_context: str | None = Field(default=None, description="Source code snippet around the finding")
+    start_line: int | None = Field(default=None, description="Starting line number of code context")
+    end_line: int | None = Field(default=None, description="Ending line number of code context")
+
 
 
 class AIPRReviewResponse(BaseModel):

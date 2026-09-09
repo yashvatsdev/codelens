@@ -117,6 +117,43 @@ def _format_source_context(
     return "\n\n".join(sections) if sections else "(No source context available)"
 
 
+def resolve_code_context(
+    file_contents: dict[str, str],
+    file_path: str | None,
+    line_number: int | None,
+    window: int = 5,
+) -> tuple[str | None, int | None, int | None]:
+    """Derive bounded code context, start_line, and end_line for a finding.
+
+    Extracts approximately `window` lines before and after `line_number`
+    bounded by the file line count.
+
+    Returns:
+        tuple of (code_context, start_line, end_line) or (None, None, None)
+        if the file or line number cannot be resolved.
+    """
+    if not file_path or not file_contents or file_path not in file_contents:
+        return None, None, None
+
+    if line_number is None or line_number <= 0:
+        return None, None, None
+
+    content = file_contents[file_path]
+    lines = content.splitlines()
+    if not lines or line_number > len(lines):
+        return None, None, None
+
+    target_idx = line_number - 1
+    start_idx = max(0, target_idx - window)
+    end_idx = min(len(lines), target_idx + window + 1)
+
+    start_line = start_idx + 1
+    end_line = end_idx
+    code_context = "\n".join(lines[start_idx:end_idx])
+
+    return code_context, start_line, end_line
+
+
 def build_ai_pr_review_prompt(
     repo_full_name: str,
     pr_number: int,
@@ -277,14 +314,27 @@ def generate_ai_pr_review(
         for kf in data.get("key_findings", []):
             if not isinstance(kf, dict):
                 continue
+            file_path = str(kf.get("file_path", ""))
+            line_number = kf.get("line_number")
+            code_context, start_line, end_line = resolve_code_context(
+                file_contents=review_result.file_contents,
+                file_path=file_path,
+                line_number=line_number,
+                window=5,
+            )
             key_findings.append({
                 "file_path": str(kf.get("file_path", "")),
                 "line_number": kf.get("line_number"),
+                "file_path": file_path,
+                "line_number": line_number,
                 "severity": str(kf.get("severity", "info")),
                 "category": str(kf.get("category", "general")),
                 "issue": str(kf.get("issue", "")),
                 "impact": str(kf.get("impact", "")),
                 "recommendation": str(kf.get("recommendation", "")),
+                "code_context": code_context,
+                "start_line": start_line,
+                "end_line": end_line,
             })
 
         for rec in data.get("recommendations", []):

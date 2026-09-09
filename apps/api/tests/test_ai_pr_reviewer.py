@@ -23,6 +23,7 @@ from app.services.ai_pr_reviewer import (
     GeminiNotConfiguredError,
     build_ai_pr_review_prompt,
     generate_ai_pr_review,
+    resolve_code_context,
 )
 from app.services.github import GitHubAPIError, GitHubRateLimitError
 from app.services.pr_reviewer import (
@@ -284,6 +285,161 @@ class TestAIPRReviewerService(unittest.TestCase):
                     repo_full_name="owner/repo",
                     gemini_client=mock_client,
                 )
+
+    def test_resolve_code_context_valid_finding(self):
+        """A valid finding in the middle of a file receives +-5 lines of context."""
+        content = "\n".join([f"line_{i} = {i}" for i in range(1, 21)])
+        file_contents = {"src/app.py": content}
+
+        code_ctx, start_line, end_line = resolve_code_context(
+            file_contents=file_contents,
+            file_path="src/app.py",
+            line_number=10,
+            window=5,
+        )
+
+        self.assertIsNotNone(code_ctx)
+        self.assertEqual(start_line, 5)
+        self.assertEqual(end_line, 15)
+        lines = code_ctx.splitlines()
+        self.assertEqual(len(lines), 11)
+        self.assertEqual(lines[0], "line_5 = 5")
+        self.assertEqual(lines[5], "line_10 = 10")
+        self.assertEqual(lines[-1], "line_15 = 15")
+
+    def test_resolve_code_context_near_start_boundary(self):
+        """Line number near the start of the file clamps start_line to 1."""
+        content = "\n".join([f"line_{i} = {i}" for i in range(1, 20)])
+        file_contents = {"src/start.py": content}
+
+        code_ctx, start_line, end_line = resolve_code_context(
+            file_contents=file_contents,
+            file_path="src/start.py",
+            line_number=2,
+            window=5,
+        )
+
+        self.assertEqual(start_line, 1)
+        self.assertEqual(end_line, 7)
+        self.assertEqual(code_ctx.splitlines()[0], "line_1 = 1")
+        self.assertEqual(code_ctx.splitlines()[1], "line_2 = 2")
+
+    def test_resolve_code_context_near_end_boundary(self):
+        """Line number near the end of the file clamps end_line to total file lines."""
+        content = "\n".join([f"line_{i} = {i}" for i in range(1, 15)])
+        file_contents = {"src/end.py": content}
+
+        code_ctx, start_line, end_line = resolve_code_context(
+            file_contents=file_contents,
+            file_path="src/end.py",
+            line_number=13,
+            window=5,
+        )
+
+        self.assertEqual(start_line, 8)
+        self.assertEqual(end_line, 14)
+        self.assertEqual(code_ctx.splitlines()[-1], "line_14 = 14")
+
+    def test_resolve_code_context_missing_file(self):
+        """When file_path is not in file_contents, return None safely."""
+        file_contents = {"src/other.py": "a = 1\n"}
+
+        code_ctx, start_line, end_line = resolve_code_context(
+            file_contents=file_contents,
+            file_path="src/missing.py",
+            line_number=1,
+        )
+
+        self.assertIsNone(code_ctx)
+        self.assertIsNone(start_line)
+        self.assertIsNone(end_line)
+
+    def test_resolve_code_context_invalid_line_number(self):
+        """None, zero, negative, or out-of-range line numbers return None safely."""
+        file_contents = {"src/app.py": "x = 1\ny = 2\n"}
+
+        for invalid_line in (None, 0, -1, 999):
+            code_ctx, start_line, end_line = resolve_code_context(
+                file_contents=file_contents,
+                file_path="src/app.py",
+                line_number=invalid_line,
+            )
+            self.assertIsNone(code_ctx)
+            self.assertIsNone(start_line)
+            self.assertIsNone(end_line)
+
+    def test_resolve_code_context_multiple_findings_and_files(self):
+        """Multiple findings across multiple files all receive correct bounded context."""
+        file_contents = {
+            "a.py": "\n".join([f"a_{i} = {i}" for i in range(1, 30)]),
+            "b.js": "\n".join([f"b_{i} = {i}" for i in range(1, 30)]),
+        }
+
+        ctx_a, start_a, end_a = resolve_code_context(file_contents, "a.py", 10, window=5)
+        ctx_b, start_b, end_b = resolve_code_context(file_contents, "b.js", 25, window=5)
+
+        self.assertEqual(start_a, 5)
+        self.assertEqual(end_a, 15)
+        self.assertIn("a_10 = 10", ctx_a)
+
+        self.assertEqual(start_b, 20)
+        self.assertEqual(end_b, 29)
+        self.assertIn("b_25 = 25", ctx_b)
+
+    def test_generate_ai_pr_review_includes_code_context(self):
+        """End-to-end service test verifying key findings contain code_context and line boundaries."""
+        content = "\n".join([f"val_{i} = {i}" for i in range(1, 25)])
+        review_result = PRReviewResult(
+            repository_id=1,
+            pull_request_number=10,
+            files_changed=1,
+            files_analyzed=1,
+            findings=[
+                PRFinding(
+                    file_path="src/calc.py",
+                    line_number=12,
+                    severity="error",
+                    category="security",
+                    message="eval usage",
+                    rule_id="JS-EVAL-USAGE",
+                )
+            ],
+            file_contents={"src/calc.py": content},
+        )
+
+        mock_payload = {
+            "summary": "Security issue detected.",
+            "risk_level": "high",
+            "overall_assessment": "eval detected on line 12.",
+            "key_findings": [
+                {
+                    "file_path": "src/calc.py",
+                    "line_number": 12,
+                    "severity": "error",
+                    "category": "security",
+                    "issue": "Use of eval()",
+                    "impact": "Code execution",
+                    "recommendation": "Use AST literal eval",
+                }
+            ],
+            "recommendations": ["Fix eval"],
+        }
+
+        mock_client = _make_mock_gemini_client(json.dumps(mock_payload))
+
+        with patch.object(settings, "gemini_api_key", "mock-key"):
+            result = generate_ai_pr_review(
+                review_result=review_result,
+                repo_full_name="acme/calc",
+                gemini_client=mock_client,
+            )
+
+        self.assertEqual(len(result["key_findings"]), 1)
+        kf = result["key_findings"][0]
+        self.assertEqual(kf["start_line"], 7)
+        self.assertEqual(kf["end_line"], 17)
+        self.assertIsNotNone(kf["code_context"])
+        self.assertIn("val_12 = 12", kf["code_context"])
 
 
 class TestAIPRReviewEndpoint(unittest.TestCase):

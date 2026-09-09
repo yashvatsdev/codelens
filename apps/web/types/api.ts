@@ -107,6 +107,9 @@ export interface AIPRKeyFinding {
   issue: string;
   impact: string;
   recommendation: string;
+  code_context?: string | null;
+  start_line?: number | null;
+  end_line?: number | null;
 }
 
 export interface AIPRReviewResponse {

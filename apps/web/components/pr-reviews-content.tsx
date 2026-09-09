@@ -7,6 +7,7 @@ import {
   ArrowRight,
   Check,
   CircleCheck,
+  Code2,
   FileCode2,
   GitBranch,
   GitPullRequest,
@@ -90,6 +91,29 @@ function FindingSeverityBadge({ severity }: { severity: string }) {
       {severity}
     </span>
   );
+}
+
+function getFindingHighlightStyles(severity: string) {
+  const norm = severity.toLowerCase();
+  if (norm === "error" || norm === "critical") {
+    return {
+      row: "bg-rose-500/15 border-l-2 border-rose-400 text-rose-100 font-medium",
+      num: "text-rose-300 font-semibold",
+      badge: "bg-rose-500/25 text-rose-300 border border-rose-500/40",
+    };
+  }
+  if (norm === "warning") {
+    return {
+      row: "bg-amber-500/15 border-l-2 border-amber-400 text-amber-100 font-medium",
+      num: "text-amber-300 font-semibold",
+      badge: "bg-amber-500/25 text-amber-200 border border-amber-500/40",
+    };
+  }
+  return {
+    row: "bg-cyan-500/15 border-l-2 border-cyan-400 text-cyan-100 font-medium",
+    num: "text-cyan-300 font-semibold",
+    badge: "bg-cyan-500/25 text-cyan-200 border border-cyan-500/40",
+  };
 }
 
 export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
@@ -431,6 +455,61 @@ export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
                           {finding.issue}
                         </p>
                       </div>
+
+                      {/* Code Context */}
+                      {finding.code_context && (
+                        <div className="space-y-1.5 pt-1">
+                          <div className="flex items-center justify-between text-[11px] font-medium text-zinc-500 uppercase tracking-wider">
+                            <span className="flex items-center gap-1.5 text-zinc-400">
+                              <Code2 className="size-3 text-cyan-300" />
+                              Code Context
+                            </span>
+                            {finding.start_line != null && finding.end_line != null && (
+                              <span className="font-mono text-[10px] text-zinc-500 lowercase">
+                                lines {finding.start_line}–{finding.end_line}
+                              </span>
+                            )}
+                          </div>
+                          <div className="overflow-x-auto rounded-lg border border-white/[0.08] bg-[#0c0d0f] p-2.5 font-mono text-xs">
+                            <div className="min-w-fit space-y-0.5">
+                              {finding.code_context.split("\n").map((line, lineIdx) => {
+                                const lineNum = (finding.start_line ?? 1) + lineIdx;
+                                const isFindingLine = lineNum === finding.line_number;
+                                const highlight = getFindingHighlightStyles(finding.severity);
+
+                                return (
+                                  <div
+                                    key={lineIdx}
+                                    className={`flex items-start gap-3 px-2 py-0.5 rounded transition ${
+                                      isFindingLine
+                                        ? highlight.row
+                                        : "text-zinc-400 hover:bg-white/[0.02]"
+                                    }`}
+                                  >
+                                    <span
+                                      className={`w-7 shrink-0 text-right select-none font-mono text-[11px] ${
+                                        isFindingLine ? highlight.num : "text-zinc-600"
+                                      }`}
+                                    >
+                                      {lineNum}
+                                    </span>
+                                    <pre className="flex-1 whitespace-pre font-mono text-[12px] leading-relaxed">
+                                      {line || " "}
+                                    </pre>
+                                    {isFindingLine && (
+                                      <span
+                                        className={`shrink-0 select-none rounded px-1.5 py-0.2 text-[10px] font-sans font-medium tracking-wide ${highlight.badge}`}
+                                      >
+                                        ← finding
+                                      </span>
+                                    )}
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        </div>
+                      )}
 
                       {/* Impact */}
                       {finding.impact && (
