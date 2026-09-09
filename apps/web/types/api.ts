@@ -119,3 +119,23 @@ export interface AIPRReviewResponse {
   key_findings: AIPRKeyFinding[];
   recommendations: string[];
 }
+
+export interface PRFindingFixRequest {
+  file_path: string;
+  line_number: number;
+  issue: string;
+  severity: string;
+  category: string;
+  message: string;
+}
+
+export interface PRFindingFixResponse {
+  file_path: string;
+  line_number: number | null;
+  explanation: string;
+  original_code: string;
+  fixed_code: string;
+  diff?: string | null;
+  resulting_code?: string | null;
+}
+

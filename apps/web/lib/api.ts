@@ -8,6 +8,8 @@ import type {
   GitHubRepositoryCreate,
   HealthResponse,
   IngestionResponse,
+  PRFindingFixRequest,
+  PRFindingFixResponse,
   RepositoryResponse,
   SourceFileResponse,
 } from "@/types/api";
@@ -123,6 +125,18 @@ export const api = {
       `/repositories/${repositoryId}/pull-requests/${pullRequestNumber}/ai-review`,
       {
         method: "POST",
+      },
+    ),
+  fixPRFinding: (
+    repositoryId: number,
+    pullRequestNumber: number,
+    payload: PRFindingFixRequest,
+  ) =>
+    request<PRFindingFixResponse>(
+      `/repositories/${repositoryId}/pull-requests/${pullRequestNumber}/findings/fix`,
+      {
+        method: "POST",
+        body: JSON.stringify(payload),
       },
     ),
 };

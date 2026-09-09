@@ -14,6 +14,8 @@ from app.schemas.finding import (
     FindingFixResponse,
     FindingResponse,
     FindingTestResponse,
+    PRFindingFixRequest,
+    PRFindingFixResponse,
     PRReviewResponse,
 )
 from app.schemas.repository import (
@@ -58,6 +60,11 @@ from app.services.ai_pr_reviewer import (
     AIPRReviewerError,
     GeminiNotConfiguredError as AIPRGeminiNotConfiguredError,
     generate_ai_pr_review,
+)
+from app.services.ai_pr_fixer import (
+    AIPRFixerError,
+    GeminiNotConfiguredError as AIPRFixerGeminiNotConfiguredError,
+    generate_pr_finding_fix,
 )
 
 router = APIRouter(prefix="/repositories", tags=["repositories"])
@@ -664,4 +671,96 @@ def ai_review_pull_request_endpoint(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=str(e),
         )
+
+
+@router.post(
+    "/{repository_id}/pull-requests/{pull_request_number}/findings/fix",
+    response_model=PRFindingFixResponse,
+)
+def fix_pr_finding_endpoint(
+    repository_id: int,
+    pull_request_number: int,
+    payload: PRFindingFixRequest,
+    db: Session = Depends(get_db),
+):
+    """Generate an AI-powered code fix for a PR review finding using Google Gemini.
+
+    Reuses Phase 1 PR review to obtain changed file contents in memory,
+    validates the file and line number, and returns the proposed fix, diff, and
+    resulting code preview.
+
+    Nothing is written to the database or GitHub.
+    """
+    repository = db.get(Repository, repository_id)
+    if not repository:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Repository with id {repository_id} not found",
+        )
+
+    if not settings.gemini_api_key:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Gemini API is not configured (missing GEMINI_API_KEY)",
+        )
+
+    try:
+        review_result = review_pull_request(
+            owner=repository.owner,
+            repo=repository.name,
+            pr_number=pull_request_number,
+            repository_id=repository.id,
+        )
+    except PRNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Pull request #{pull_request_number} not found: {e}",
+        )
+    except GitHubRateLimitError as e:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=str(e),
+        )
+    except GitHubServiceError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(e),
+        )
+
+    if payload.file_path not in review_result.file_contents:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"File '{payload.file_path}' not found in PR #{pull_request_number} changed files",
+        )
+
+    file_content = review_result.file_contents[payload.file_path]
+    lines = file_content.splitlines()
+    total_lines = len(lines)
+    if total_lines == 0 or payload.line_number < 1 or payload.line_number > total_lines:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Line number {payload.line_number} is invalid for file '{payload.file_path}' (total lines: {total_lines})",
+        )
+
+    try:
+        return generate_pr_finding_fix(
+            file_contents=review_result.file_contents,
+            file_path=payload.file_path,
+            line_number=payload.line_number,
+            issue=payload.issue,
+            severity=payload.severity,
+            category=payload.category,
+            message=payload.message,
+        )
+    except AIPRFixerGeminiNotConfiguredError as e:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(e),
+        )
+    except AIPRFixerError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(e),
+        )
+
 

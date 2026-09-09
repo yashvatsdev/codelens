@@ -97,3 +97,25 @@ class AIPRReviewResponse(BaseModel):
     overall_assessment: str = Field(..., description="Detailed overall assessment")
     key_findings: list[AIPRKeyFindingResponse] = []
     recommendations: list[str] = []
+
+
+class PRFindingFixRequest(BaseModel):
+    """Request payload for generating an AI fix for a PR finding."""
+    file_path: str = Field(..., description="Path to the file containing the finding")
+    line_number: int = Field(..., description="Line number of the finding")
+    issue: str = Field(..., description="Issue description")
+    severity: str = Field(..., description="Severity level")
+    category: str = Field(..., description="Category of the finding")
+    message: str = Field(..., description="Detailed finding message")
+
+
+class PRFindingFixResponse(BaseModel):
+    """Response returned after generating an AI fix for a PR finding."""
+    file_path: str
+    line_number: int | None = None
+    explanation: str
+    original_code: str
+    fixed_code: str
+    diff: str | None = None
+    resulting_code: str | None = None
+

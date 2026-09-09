@@ -8,6 +8,8 @@ from app.schemas.finding import (
     FindingFixResponse,
     FindingResponse,
     FindingTestResponse,
+    PRFindingFixRequest,
+    PRFindingFixResponse,
     PRFindingResponse,
     PRReviewResponse,
 )
@@ -34,6 +36,8 @@ __all__ = [
     "FindingFixResponse",
     "FindingResponse",
     "FindingTestResponse",
+    "PRFindingFixRequest",
+    "PRFindingFixResponse",
     "PRFindingResponse",
     "PRReviewResponse",
     "GitHubMetadataRequest",
