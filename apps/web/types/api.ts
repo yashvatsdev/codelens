@@ -88,4 +88,5 @@ export interface FindingFixResponse {
   original_code: string;
   fixed_code: string;
   diff?: string | null;
+  resulting_code?: string | null;
 }

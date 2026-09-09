@@ -45,5 +45,6 @@ class FindingFixResponse(BaseModel):
     original_code: str
     fixed_code: str
     diff: str | None = None
+    resulting_code: str | None = None
 
 

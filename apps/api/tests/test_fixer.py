@@ -15,6 +15,7 @@ from app.services.fixer import (
     FixerError,
     GeminiNotConfiguredError,
     build_fixer_prompt,
+    compute_resulting_code,
     compute_unified_diff,
     generate_fix,
 )
@@ -109,6 +110,36 @@ class TestFixerServiceAndEndpoint(unittest.TestCase):
         self.assertIn("+++ b/src/utils.py", diff)
         self.assertIn("-    debugger", diff)
 
+    def test_compute_resulting_code_deletion(self):
+        source = (
+            "function computeTotal(items) {\n"
+            "  debugger;\n"
+            "  return items.reduce((a, b) => a + b, 0);\n"
+            "}\n"
+        )
+        res = compute_resulting_code(
+            source_content=source,
+            original_code="  debugger;\n",
+            fixed_code="",
+            line_number=2,
+            window=5,
+        )
+        self.assertNotIn("debugger", res)
+        self.assertIn("function computeTotal", res)
+        self.assertIn("return items.reduce", res)
+
+    def test_compute_resulting_code_replacement(self):
+        source = "x = eval(data)\nreturn x\n"
+        res = compute_resulting_code(
+            source_content=source,
+            original_code="eval(data)",
+            fixed_code="json.loads(data)",
+            line_number=1,
+            window=5,
+        )
+        self.assertIn("json.loads(data)", res)
+        self.assertNotIn("eval(data)", res)
+
     def test_fix_missing_api_key_returns_503(self):
         repo = self._create_repo()
         self._create_source_file(repo.id, "app.py", "x = 1\n")
@@ -196,6 +227,9 @@ class TestFixerServiceAndEndpoint(unittest.TestCase):
             self.assertEqual(data["original_code"], "  debugger;\n")
             self.assertEqual(data["fixed_code"], "")
             self.assertIn("-  debugger;", data["diff"])
+            self.assertIsNotNone(data["resulting_code"])
+            self.assertNotIn("debugger", data["resulting_code"])
+            self.assertIn("return items.reduce", data["resulting_code"])
 
     @patch("google.genai.Client")
     def test_prompt_contains_finding_metadata_and_source_context(self, mock_client_cls):

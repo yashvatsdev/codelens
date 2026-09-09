@@ -49,6 +49,56 @@ def compute_unified_diff(original: str, fixed: str, file_path: str = "file") -> 
     return "".join(diff)
 
 
+def compute_resulting_code(
+    source_content: str,
+    original_code: str,
+    fixed_code: str,
+    line_number: int | None = None,
+    window: int = 5,
+) -> str:
+    """Compute a preview of the source context around the finding after applying the fix.
+
+    This function operates strictly in memory and does not modify any persistent storage.
+    """
+    if not source_content:
+        return fixed_code
+
+    applied_content = source_content
+    # 1. Direct substring replacement if original_code is found in source_content
+    if original_code and original_code in source_content:
+        applied_content = source_content.replace(original_code, fixed_code, 1)
+    elif original_code and original_code.strip() in source_content:
+        applied_content = source_content.replace(original_code.strip(), fixed_code.strip(), 1)
+    elif line_number is not None and line_number > 0:
+        lines = source_content.splitlines()
+        idx = line_number - 1
+        if 0 <= idx < len(lines):
+            if fixed_code.strip():
+                lines[idx] = fixed_code.rstrip("\n")
+            else:
+                lines.pop(idx)
+            applied_content = "\n".join(lines)
+
+    # 2. Extract context window from the updated content around line_number
+    applied_lines = applied_content.splitlines()
+    if not applied_lines:
+        return "(empty file)"
+
+    if line_number is None or line_number <= 0:
+        start_idx = 0
+        end_idx = min(len(applied_lines), window * 2)
+    else:
+        target_idx = min(line_number - 1, max(0, len(applied_lines) - 1))
+        start_idx = max(0, target_idx - window)
+        end_idx = min(len(applied_lines), target_idx + window + 1)
+
+    result_lines = []
+    for i in range(start_idx, end_idx):
+        result_lines.append(f"{i + 1:4d} | {applied_lines[i]}")
+
+    return "\n".join(result_lines)
+
+
 def build_fixer_prompt(
     rule_id: str,
     severity: str,
@@ -175,10 +225,19 @@ def generate_fix(
             file_path=finding.file_path or "source_file",
         )
 
+    resulting_code = compute_resulting_code(
+        source_content=source_content,
+        original_code=original_code,
+        fixed_code=fixed_code,
+        line_number=finding.line_number,
+        window=5,
+    )
+
     return FindingFixResponse(
         finding_id=finding.id,
         explanation=explanation,
         original_code=original_code,
         fixed_code=fixed_code,
         diff=diff,
+        resulting_code=resulting_code,
     )

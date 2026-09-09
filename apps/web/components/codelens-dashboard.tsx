@@ -889,13 +889,31 @@ export function CodeLensDashboard() {
                         <span className="inline-block size-1.5 rounded-full bg-emerald-500" />
                         Fixed Code
                       </div>
-                      <pre className="rounded-lg border border-white/[0.08] bg-black/40 p-3 font-mono text-xs text-zinc-300 overflow-x-auto max-h-48 whitespace-pre-wrap">
-                        <code>
-                          {fixResult.fixed_code || "(No replacement snippet)"}
-                        </code>
-                      </pre>
+                      {!fixResult.fixed_code || !fixResult.fixed_code.trim() ? (
+                        <div className="rounded-lg border border-emerald-500/20 bg-emerald-950/20 p-3 font-mono text-xs text-emerald-300 flex items-center gap-2 h-[calc(100%-1.5rem)] min-h-[4rem]">
+                          <CircleCheck className="size-4 shrink-0 text-emerald-400" />
+                          <span>Line removed</span>
+                        </div>
+                      ) : (
+                        <pre className="rounded-lg border border-white/[0.08] bg-black/40 p-3 font-mono text-xs text-zinc-300 overflow-x-auto max-h-48 whitespace-pre-wrap">
+                          <code>{fixResult.fixed_code}</code>
+                        </pre>
+                      )}
                     </div>
                   </div>
+
+                  {/* Resulting Code Section */}
+                  {fixResult.resulting_code && (
+                    <div className="pt-2">
+                      <div className="text-xs font-medium text-zinc-400 mb-1.5 flex items-center gap-1.5">
+                        <FileCode2 className="size-3.5 text-cyan-400" />
+                        Resulting Code
+                      </div>
+                      <pre className="rounded-lg border border-white/[0.08] bg-black/50 p-3 font-mono text-xs text-zinc-300 overflow-x-auto max-h-56 whitespace-pre-wrap">
+                        <code>{fixResult.resulting_code}</code>
+                      </pre>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
