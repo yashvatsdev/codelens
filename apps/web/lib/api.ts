@@ -1,5 +1,7 @@
 import type {
   AnalysisSummaryResponse,
+  FindingExplanationResponse,
+  FindingFixResponse,
   FindingResponse,
   GitHubRepositoryCreate,
   HealthResponse,
@@ -91,6 +93,20 @@ export const api = {
       `/repositories/${repositoryId}`,
       {
         method: "DELETE",
+      },
+    ),
+  explainFinding: (repositoryId: number, findingId: number) =>
+    request<FindingExplanationResponse>(
+      `/repositories/${repositoryId}/findings/${findingId}/explain`,
+      {
+        method: "POST",
+      },
+    ),
+  fixFinding: (repositoryId: number, findingId: number) =>
+    request<FindingFixResponse>(
+      `/repositories/${repositoryId}/findings/${findingId}/fix`,
+      {
+        method: "POST",
       },
     ),
 };

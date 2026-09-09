@@ -43,7 +43,12 @@ export interface SourceFileResponse {
 }
 
 export type SeverityType = "error" | "warning" | "info";
-export type CategoryType = "syntax" | "style" | "maintainability" | "bug" | "complexity";
+export type CategoryType =
+  | "syntax"
+  | "style"
+  | "maintainability"
+  | "bug"
+  | "complexity";
 
 export interface FindingResponse {
   id: number;
@@ -69,4 +74,18 @@ export interface HealthResponse {
   service?: string;
   database?: string;
   detail?: string;
+}
+
+export interface FindingExplanationResponse {
+  finding_id: number;
+  explanation: string;
+  remediation?: string | null;
+}
+
+export interface FindingFixResponse {
+  finding_id: number;
+  explanation: string;
+  original_code: string;
+  fixed_code: string;
+  diff?: string | null;
 }

@@ -35,6 +35,7 @@ import { Button } from "@/components/ui/button";
 import { api, ApiError } from "@/lib/api";
 import type {
   AnalysisSummaryResponse,
+  FindingFixResponse,
   FindingResponse,
   HealthResponse,
   IngestionResponse,
@@ -157,6 +158,11 @@ export function CodeLensDashboard() {
   const [viewingFilesRepoId, setViewingFilesRepoId] = useState<number | null>(
     null,
   );
+
+  // AI Fix state for selected finding
+  const [isGeneratingFix, setIsGeneratingFix] = useState(false);
+  const [fixResult, setFixResult] = useState<FindingFixResponse | null>(null);
+  const [fixError, setFixError] = useState<string | null>(null);
 
   // Load repositories, findings, and health from backend
   const loadData = async () => {
@@ -286,6 +292,35 @@ export function CodeLensDashboard() {
     } finally {
       setDeletingRepoId(null);
     }
+  };
+
+  // AI Fix action for selected finding
+  const handleGenerateFix = async () => {
+    if (!selectedFinding || isGeneratingFix) return;
+    setIsGeneratingFix(true);
+    setFixError(null);
+    try {
+      const res = await api.fixFinding(
+        selectedFinding.repository_id,
+        selectedFinding.id,
+      );
+      setFixResult(res);
+    } catch (err) {
+      setFixError(
+        err instanceof ApiError
+          ? err.message
+          : "Failed to generate fix. Please check your Gemini API key and try again.",
+      );
+    } finally {
+      setIsGeneratingFix(false);
+    }
+  };
+
+  const handleCloseFindingModal = () => {
+    setSelectedFinding(null);
+    setFixResult(null);
+    setFixError(null);
+    setIsGeneratingFix(false);
   };
 
   const filteredFindings = useMemo(() => {
@@ -521,7 +556,11 @@ export function CodeLensDashboard() {
                   setSeverityFilter={setSeverityFilter}
                   findings={filteredFindings}
                   repositories={repositories}
-                  onSelect={setSelectedFinding}
+                  onSelect={(finding) => {
+                    setSelectedFinding(finding);
+                    setFixResult(null);
+                    setFixError(null);
+                  }}
                 />
               )}
               {active === "Analysis" && (
@@ -723,13 +762,14 @@ export function CodeLensDashboard() {
       {selectedFinding && (
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
-          onClick={() => setSelectedFinding(null)}
+          onClick={handleCloseFindingModal}
         >
           <div
-            className="w-full max-w-lg rounded-xl border border-white/[0.1] bg-[#111315] p-6 shadow-2xl"
+            className="w-full max-w-2xl max-h-[90vh] flex flex-col rounded-xl border border-white/[0.1] bg-[#111315] shadow-2xl overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-center justify-between">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between p-6 border-b border-white/[0.08]">
               <div className="flex items-center gap-2">
                 <SeverityBadge severity={selectedFinding.severity} />
                 <span className="rounded bg-white/[0.06] px-2 py-0.5 font-mono text-[11px] text-zinc-400">
@@ -740,36 +780,153 @@ export function CodeLensDashboard() {
                 </span>
               </div>
               <button
-                onClick={() => setSelectedFinding(null)}
+                onClick={handleCloseFindingModal}
                 aria-label="Close finding"
-                className="text-zinc-500 hover:text-zinc-300"
+                className="text-zinc-500 hover:text-zinc-300 transition-colors"
               >
                 <X className="size-4" />
               </button>
             </div>
-            <h2 className="mt-4 text-base font-medium leading-snug text-zinc-100">
-              {selectedFinding.message}
-            </h2>
-            <div className="mt-5 rounded-lg border border-white/[0.07] bg-black/30 p-3 font-mono text-xs text-zinc-300">
-              <span className="text-zinc-500">File: </span>
-              {selectedFinding.file_path || "Repository-level"}
-              {selectedFinding.line_number && (
-                <span className="text-cyan-300/80">
-                  {" "}
-                  : line {selectedFinding.line_number}
-                </span>
+
+            {/* Modal Body - scrollable */}
+            <div className="p-6 overflow-y-auto space-y-4 text-zinc-200">
+              <h2 className="text-base font-medium leading-snug text-zinc-100">
+                {selectedFinding.message}
+              </h2>
+
+              <div className="rounded-lg border border-white/[0.07] bg-black/30 p-3 font-mono text-xs text-zinc-300">
+                <span className="text-zinc-500">File: </span>
+                {selectedFinding.file_path || "Repository-level"}
+                {selectedFinding.line_number && (
+                  <span className="text-cyan-300/80">
+                    {" "}
+                    : line {selectedFinding.line_number}
+                  </span>
+                )}
+              </div>
+
+              <div className="text-[11px] text-zinc-500">
+                Detected on{" "}
+                {new Date(selectedFinding.created_at).toLocaleString()}
+              </div>
+
+              {/* Error state */}
+              {fixError && (
+                <div className="rounded-lg border border-rose-500/20 bg-rose-500/10 p-3.5 text-xs text-rose-300 flex items-start gap-2.5">
+                  <AlertCircle className="size-4 shrink-0 mt-0.5 text-rose-400" />
+                  <div className="leading-relaxed">{fixError}</div>
+                </div>
+              )}
+
+              {/* Fix result display */}
+              {fixResult && (
+                <div className="space-y-4 pt-2">
+                  {/* Explanation */}
+                  <div className="rounded-lg border border-cyan-500/20 bg-cyan-950/20 p-4">
+                    <div className="text-xs font-semibold text-cyan-300 flex items-center gap-1.5 mb-1.5">
+                      <Sparkles className="size-3.5" />
+                      AI Proposed Fix
+                    </div>
+                    <p className="text-xs leading-relaxed text-zinc-300 whitespace-pre-wrap">
+                      {fixResult.explanation}
+                    </p>
+                  </div>
+
+                  {/* Unified Diff */}
+                  {fixResult.diff && (
+                    <div>
+                      <div className="text-xs font-medium text-zinc-400 mb-1.5 flex items-center gap-1.5">
+                        <TerminalSquare className="size-3.5 text-zinc-500" />
+                        Unified Diff
+                      </div>
+                      <div className="rounded-lg border border-white/[0.08] bg-black/50 p-3 font-mono text-xs overflow-x-auto max-h-60">
+                        {fixResult.diff.split("\n").map((line, idx) => {
+                          let color = "text-zinc-400";
+                          let bg = "";
+                          if (line.startsWith("+") && !line.startsWith("+++")) {
+                            color = "text-emerald-400";
+                            bg = "bg-emerald-950/30";
+                          } else if (
+                            line.startsWith("-") &&
+                            !line.startsWith("---")
+                          ) {
+                            color = "text-rose-400";
+                            bg = "bg-rose-950/30";
+                          } else if (line.startsWith("@")) {
+                            color = "text-cyan-400 font-semibold";
+                          }
+                          return (
+                            <div
+                              key={idx}
+                              className={`${color} ${bg} px-1 rounded-sm`}
+                            >
+                              {line || " "}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Original vs Fixed Code */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
+                    {/* Original code */}
+                    <div>
+                      <div className="text-[11px] font-medium text-rose-400/90 mb-1 flex items-center gap-1">
+                        <span className="inline-block size-1.5 rounded-full bg-rose-500" />
+                        Original Code
+                      </div>
+                      <pre className="rounded-lg border border-white/[0.08] bg-black/40 p-3 font-mono text-xs text-zinc-300 overflow-x-auto max-h-48 whitespace-pre-wrap">
+                        <code>
+                          {fixResult.original_code || "(No snippet provided)"}
+                        </code>
+                      </pre>
+                    </div>
+
+                    {/* Fixed code */}
+                    <div>
+                      <div className="text-[11px] font-medium text-emerald-400/90 mb-1 flex items-center gap-1">
+                        <span className="inline-block size-1.5 rounded-full bg-emerald-500" />
+                        Fixed Code
+                      </div>
+                      <pre className="rounded-lg border border-white/[0.08] bg-black/40 p-3 font-mono text-xs text-zinc-300 overflow-x-auto max-h-48 whitespace-pre-wrap">
+                        <code>
+                          {fixResult.fixed_code || "(No replacement snippet)"}
+                        </code>
+                      </pre>
+                    </div>
+                  </div>
+                </div>
               )}
             </div>
-            <div className="mt-3 text-[11px] text-zinc-500">
-              Detected on{" "}
-              {new Date(selectedFinding.created_at).toLocaleString()}
-            </div>
-            <div className="mt-5 flex justify-end">
+
+            {/* Footer Actions */}
+            <div className="flex items-center justify-between p-4 px-6 border-t border-white/[0.08] bg-white/[0.02]">
               <Button
-                onClick={() => setSelectedFinding(null)}
+                onClick={handleCloseFindingModal}
                 variant="outline"
+                size="sm"
               >
                 Close
+              </Button>
+
+              <Button
+                onClick={handleGenerateFix}
+                disabled={isGeneratingFix}
+                size="sm"
+                className="bg-cyan-300 text-black hover:bg-cyan-200"
+              >
+                {isGeneratingFix ? (
+                  <>
+                    <Loader2 className="size-3.5 animate-spin mr-1.5" />
+                    Generating Fix...
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="size-3.5 mr-1.5" />
+                    {fixResult ? "Regenerate Fix" : "Generate Fix"}
+                  </>
+                )}
               </Button>
             </div>
           </div>
