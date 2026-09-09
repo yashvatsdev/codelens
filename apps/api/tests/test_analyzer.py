@@ -7,7 +7,9 @@ from app.models.source_file import SourceFile
 from app.services.analyzer import (
     analyze_python_file,
     analyze_repository,
+    analyze_source_file,
 )
+from app.services.js_analyzer import analyze_javascript_file
 
 
 class TestPythonStaticAnalyzer(unittest.TestCase):
@@ -82,6 +84,125 @@ class TestPythonStaticAnalyzer(unittest.TestCase):
         )
         findings = analyze_python_file(code, "clean.py")
         self.assertEqual(len(findings), 0)
+
+
+class TestJavaScriptStaticAnalyzer(unittest.TestCase):
+    def test_console_log_detection(self):
+        code = (
+            "function greet(name) {\n"
+            "  console.log('Hello', name);\n"
+            "  return name;\n"
+            "}\n"
+        )
+        findings = analyze_javascript_file(code, "app.js")
+        log_findings = [f for f in findings if f["rule_id"] == "JS-CONSOLE-LOG"]
+        self.assertEqual(len(log_findings), 1)
+        self.assertEqual(log_findings[0]["line_number"], 2)
+        self.assertEqual(log_findings[0]["severity"], "warning")
+        self.assertEqual(log_findings[0]["category"], "style")
+        self.assertIn("console.log", log_findings[0]["message"])
+
+    def test_eval_usage_detection(self):
+        code = (
+            "function executeCode(userString) {\n"
+            "  const result = eval(userString);\n"
+            "  return result;\n"
+            "}\n"
+        )
+        findings = analyze_javascript_file(code, "runner.ts")
+        eval_findings = [f for f in findings if f["rule_id"] == "JS-EVAL-USAGE"]
+        self.assertEqual(len(eval_findings), 1)
+        self.assertEqual(eval_findings[0]["line_number"], 2)
+        self.assertEqual(eval_findings[0]["severity"], "error")
+        self.assertEqual(eval_findings[0]["category"], "security")
+        self.assertIn("eval()", eval_findings[0]["message"])
+
+    def test_debugger_detection(self):
+        code = (
+            "function processData(items) {\n"
+            "  debugger;\n"
+            "  return items.map(x => x * 2);\n"
+            "}\n"
+        )
+        findings = analyze_javascript_file(code, "process.tsx")
+        debugger_findings = [f for f in findings if f["rule_id"] == "JS-DEBUGGER"]
+        self.assertEqual(len(debugger_findings), 1)
+        self.assertEqual(debugger_findings[0]["line_number"], 2)
+        self.assertEqual(debugger_findings[0]["severity"], "warning")
+        self.assertEqual(debugger_findings[0]["category"], "bug")
+        self.assertIn("debugger", debugger_findings[0]["message"])
+
+    def test_todo_fixme_comment_detection(self):
+        code = (
+            "// TODO: implement input validation\n"
+            "export function parse(input: string) {\n"
+            "  /* FIXME: handle edge case with null bytes */\n"
+            "  return input.trim();\n"
+            "}\n"
+        )
+        findings = analyze_javascript_file(code, "parser.ts")
+        todo_findings = [f for f in findings if f["rule_id"] == "JS-TODO-FIXME"]
+        self.assertEqual(len(todo_findings), 2)
+        self.assertEqual(todo_findings[0]["line_number"], 1)
+        self.assertEqual(todo_findings[0]["severity"], "info")
+        self.assertEqual(todo_findings[0]["category"], "maintainability")
+        self.assertEqual(todo_findings[1]["line_number"], 3)
+
+    def test_clean_js_file_no_findings(self):
+        code = (
+            "export function add(a, b) {\n"
+            "  const sum = a + b;\n"
+            "  return sum;\n"
+            "}\n"
+        )
+        findings = analyze_javascript_file(code, "math.js")
+        self.assertEqual(len(findings), 0)
+
+    def test_clean_ts_file_no_findings(self):
+        code = (
+            "interface User {\n"
+            "  id: string;\n"
+            "  name: string;\n"
+            "}\n"
+            "\n"
+            "export function getUserGreeting(user: User): string {\n"
+            "  return `Hello, ${user.name}!`;\n"
+            "}\n"
+        )
+        findings = analyze_javascript_file(code, "user.ts")
+        self.assertEqual(len(findings), 0)
+
+    def test_strings_do_not_trigger_rules(self):
+        code = (
+            'const logMsg = "console.log(inside string)";\n'
+            'const evalMsg = "eval(also inside string)";\n'
+            'const dbgMsg = "debugger inside string";\n'
+        )
+        findings = analyze_javascript_file(code, "strings.js")
+        self.assertEqual(len(findings), 0)
+
+
+class TestAnalyzerDispatcher(unittest.TestCase):
+    def test_dispatches_python_file(self):
+        code = "# TODO: python todo\nimport unused\n"
+        findings = analyze_source_file(code, "module.py")
+        rule_ids = {f["rule_id"] for f in findings}
+        self.assertIn("PY-TODO-FIXME", rule_ids)
+        self.assertIn("PY-UNUSED-IMPORT", rule_ids)
+
+    def test_dispatches_js_ts_extensions(self):
+        extensions = [".js", ".jsx", ".mjs", ".cjs", ".ts", ".tsx", ".mts", ".cts"]
+        code = "console.log('test');\n"
+        for ext in extensions:
+            findings = analyze_source_file(code, f"file{ext}")
+            self.assertEqual(len(findings), 1, f"Failed for extension {ext}")
+            self.assertEqual(findings[0]["rule_id"], "JS-CONSOLE-LOG")
+
+    def test_unsupported_extensions_return_no_findings(self):
+        code = "console.log('test');\n# TODO: unsupported\n"
+        for path in ["file.txt", "file.json", "file.yaml", "file.html", "file.rs", "Dockerfile"]:
+            findings = analyze_source_file(code, path)
+            self.assertEqual(len(findings), 0, f"Expected no findings for {path}")
 
 
 class TestAnalyzerRepositoryPersistence(unittest.TestCase):
@@ -173,6 +294,70 @@ class TestAnalyzerRepositoryPersistence(unittest.TestCase):
 
         self.assertEqual(initial_count, new_count)
         self.assertEqual(res2.total_findings, new_count)
+
+    def test_mixed_python_and_js_ts_repository_analysis(self):
+        repo = Repository(
+            github_id="analyzer-test-org/mixed-repo",
+            name="mixed-repo",
+            full_name="analyzer-test-org/mixed-repo",
+            owner="analyzer-test-org",
+            url="https://github.com/analyzer-test-org/mixed-repo",
+            default_branch="main",
+        )
+        self.db.add(repo)
+        self.db.commit()
+        self.db.refresh(repo)
+
+        # 1 Python file, 1 JS file, 1 TS file, 1 unsupported file (.json)
+        sf_py = SourceFile(
+            repository_id=repo.id,
+            path="backend/server.py",
+            sha="sha_py",
+            content="# TODO: python task\nimport sys\n",
+            size=40,
+        )
+        sf_js = SourceFile(
+            repository_id=repo.id,
+            path="frontend/index.js",
+            sha="sha_js",
+            content="console.log('booting');\nconst x = eval('2+2');\n",
+            size=50,
+        )
+        sf_ts = SourceFile(
+            repository_id=repo.id,
+            path="frontend/debug.ts",
+            sha="sha_ts",
+            content="// FIXME: remove before release\ndebugger;\n",
+            size=45,
+        )
+        sf_json = SourceFile(
+            repository_id=repo.id,
+            path="package.json",
+            sha="sha_json",
+            content='{"name": "app"}',
+            size=20,
+        )
+        self.db.add_all([sf_py, sf_js, sf_ts, sf_json])
+        self.db.commit()
+
+        res = analyze_repository(repo.id, db=self.db)
+        # Analyzable files: backend/server.py, frontend/index.js, frontend/debug.ts = 3 files
+        self.assertEqual(res.files_analyzed, 3)
+        self.assertEqual(res.repository_id, repo.id)
+
+        stored_findings = self.db.query(Finding).filter(Finding.repository_id == repo.id).all()
+        self.assertEqual(len(stored_findings), res.total_findings)
+
+        rule_ids = {f.rule_id for f in stored_findings}
+        # Python findings
+        self.assertIn("PY-TODO-FIXME", rule_ids)
+        self.assertIn("PY-UNUSED-IMPORT", rule_ids)
+        # JS findings
+        self.assertIn("JS-CONSOLE-LOG", rule_ids)
+        self.assertIn("JS-EVAL-USAGE", rule_ids)
+        # TS findings
+        self.assertIn("JS-TODO-FIXME", rule_ids)
+        self.assertIn("JS-DEBUGGER", rule_ids)
 
 
 class TestAnalyzerEndpoints(unittest.TestCase):

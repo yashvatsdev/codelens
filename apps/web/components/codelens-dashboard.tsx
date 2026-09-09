@@ -27,6 +27,7 @@ import {
   ShieldCheck,
   Sparkles,
   TerminalSquare,
+  Trash2,
   X,
   Zap,
 } from "lucide-react";
@@ -150,6 +151,9 @@ export function CodeLensDashboard() {
   // Action loading states
   const [ingestingRepoId, setIngestingRepoId] = useState<number | null>(null);
   const [analyzingRepoId, setAnalyzingRepoId] = useState<number | null>(null);
+  const [deletingRepoId, setDeletingRepoId] = useState<number | null>(null);
+  const [repoToDelete, setRepoToDelete] = useState<RepoDetails | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [viewingFilesRepoId, setViewingFilesRepoId] = useState<number | null>(
     null,
   );
@@ -261,6 +265,26 @@ export function CodeLensDashboard() {
       );
     } finally {
       setAnalyzingRepoId(null);
+    }
+  };
+
+  // Delete repository action
+  const handleDeleteRepo = async () => {
+    if (!repoToDelete || deletingRepoId !== null) return;
+    const target = repoToDelete;
+    setDeletingRepoId(target.id);
+    setDeleteError(null);
+    try {
+      await api.deleteRepository(target.id);
+      setRepoToDelete(null);
+      setNotice(`Repository ${target.full_name} deleted successfully.`);
+      await loadData();
+    } catch (err) {
+      setDeleteError(
+        err instanceof ApiError ? err.message : "Failed to delete repository",
+      );
+    } finally {
+      setDeletingRepoId(null);
     }
   };
 
@@ -480,8 +504,13 @@ export function CodeLensDashboard() {
                   onIngest={handleIngest}
                   onAnalyze={handleAnalyze}
                   onViewFiles={(id) => setViewingFilesRepoId(id)}
+                  onDelete={(repo) => {
+                    setRepoToDelete(repo);
+                    setDeleteError(null);
+                  }}
                   ingestingRepoId={ingestingRepoId}
                   analyzingRepoId={analyzingRepoId}
+                  deletingRepoId={deletingRepoId}
                 />
               )}
               {active === "Findings" && (
@@ -590,6 +619,100 @@ export function CodeLensDashboard() {
                 </Button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Repository Confirmation Modal */}
+      {repoToDelete && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          onClick={() => {
+            if (deletingRepoId === null) {
+              setRepoToDelete(null);
+              setDeleteError(null);
+            }
+          }}
+        >
+          <div
+            className="w-full max-w-md rounded-xl border border-red-500/20 bg-[#111315] p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="flex size-8 items-center justify-center rounded-lg bg-red-500/10 text-red-400">
+                  <Trash2 className="size-4" />
+                </div>
+                <div>
+                  <h2 className="font-medium text-zinc-100">Delete repository</h2>
+                  <p className="mt-0.5 text-xs text-zinc-500">
+                    This action cannot be undone.
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  if (deletingRepoId === null) {
+                    setRepoToDelete(null);
+                    setDeleteError(null);
+                  }
+                }}
+                disabled={deletingRepoId !== null}
+                className="text-zinc-500 hover:text-zinc-300 disabled:opacity-50"
+                aria-label="Close delete dialog"
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+
+            <p className="mt-4 text-xs text-zinc-300 leading-relaxed">
+              Are you sure you want to delete{" "}
+              <span className="font-mono font-medium text-white">
+                {repoToDelete.full_name}
+              </span>
+              ? This will delete the repository and all of its stored source
+              files and static analysis findings.
+            </p>
+
+            {deleteError && (
+              <div className="mt-3 flex items-center gap-1.5 rounded-lg border border-red-500/20 bg-red-500/10 p-2.5 text-xs text-red-400">
+                <AlertCircle className="size-3.5 shrink-0" />
+                <span>{deleteError}</span>
+              </div>
+            )}
+
+            <div className="mt-6 flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  setRepoToDelete(null);
+                  setDeleteError(null);
+                }}
+                disabled={deletingRepoId !== null}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={handleDeleteRepo}
+                disabled={deletingRepoId !== null}
+                className="bg-red-500/20 text-red-300 border border-red-500/30 hover:bg-red-500/30"
+              >
+                {deletingRepoId !== null ? (
+                  <>
+                    <Loader2 className="size-3.5 animate-spin mr-1.5" />
+                    Deleting...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="size-3.5 mr-1.5" />
+                    Delete Repository
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         </div>
       )}

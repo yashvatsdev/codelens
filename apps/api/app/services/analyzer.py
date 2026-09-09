@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.models.finding import Finding
 from app.models.source_file import SourceFile
+from app.services.js_analyzer import JS_TS_EXTENSIONS, analyze_javascript_file
 
 
 class PythonStaticAnalyzer(ast.NodeVisitor):
@@ -149,9 +150,38 @@ def analyze_python_file(
     return findings
 
 
+PYTHON_EXTENSIONS: frozenset[str] = frozenset({".py"})
+ANALYZABLE_EXTENSIONS: frozenset[str] = PYTHON_EXTENSIONS | JS_TS_EXTENSIONS
+
+
+def get_file_extension(file_path: str) -> str:
+    """Extract lowercase file extension including dot (e.g. '.ts', '.py')."""
+    _, _, ext = file_path.rpartition(".")
+    return f".{ext.lower()}" if ext else ""
+
+
+def analyze_source_file(
+    content: str,
+    file_path: str,
+    max_function_lines: int = 50,
+) -> list[dict]:
+    """Dispatch file content to the appropriate language analyzer based on file extension.
+
+    - Python files (.py) use the Python AST and line analyzer.
+    - JS/TS files (.js, .jsx, .mjs, .cjs, .ts, .tsx, .mts, .cts) use the JS/TS analyzer.
+    - Other files return an empty list of findings.
+    """
+    ext = get_file_extension(file_path)
+    if ext in PYTHON_EXTENSIONS:
+        return analyze_python_file(content, file_path, max_function_lines=max_function_lines)
+    elif ext in JS_TS_EXTENSIONS:
+        return analyze_javascript_file(content, file_path)
+    return []
+
+
 @dataclass
 class AnalysisResult:
-    """Summary returned after analyzing a repository's Python source files."""
+    """Summary returned after analyzing a repository's source files."""
     repository_id: int
     files_analyzed: int
     total_findings: int
@@ -163,14 +193,14 @@ def analyze_repository(
     db: Session,
     max_function_lines: int = 50,
 ) -> AnalysisResult:
-    """Analyze all stored Python source files for a repository and persist findings to PostgreSQL."""
+    """Analyze all stored Python and JS/TS source files for a repository and persist findings to PostgreSQL."""
     source_files = db.execute(
         select(SourceFile).where(SourceFile.repository_id == repository_id)
     ).scalars().all()
 
-    python_files = [
+    analyzable_files = [
         f for f in source_files
-        if f.path.endswith(".py")
+        if get_file_extension(f.path) in ANALYZABLE_EXTENSIONS
     ]
 
     # Delete existing findings for this repository (full re-analysis)
@@ -179,8 +209,8 @@ def analyze_repository(
     )
 
     all_findings: list[Finding] = []
-    for sf in python_files:
-        raw_findings = analyze_python_file(
+    for sf in analyzable_files:
+        raw_findings = analyze_source_file(
             content=sf.content,
             file_path=sf.path,
             max_function_lines=max_function_lines,
@@ -202,8 +232,9 @@ def analyze_repository(
 
     return AnalysisResult(
         repository_id=repository_id,
-        files_analyzed=len(python_files),
+        files_analyzed=len(analyzable_files),
         total_findings=len(all_findings),
         findings=all_findings,
     )
+
 

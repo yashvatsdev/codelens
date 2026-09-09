@@ -16,7 +16,9 @@ from app.api.routes.repositories import (
     get_repository,
 )
 from app.db.database import SessionLocal
+from app.models.finding import Finding
 from app.models.repository import Repository
+from app.models.source_file import SourceFile
 from app.schemas.repository import (
     GitHubMetadataRequest,
     GitHubRepositoryCreate,
@@ -276,6 +278,52 @@ class TestRepositoryDatabaseEndpoints(unittest.TestCase):
         self.assertEqual(repo.name, "auto-parsed")
         self.assertEqual(repo.owner, "test-url-org")
         self.assertEqual(repo.full_name, "test-url-org/auto-parsed")
+
+    def test_delete_repository_not_found(self):
+        with self.assertRaises(HTTPException) as ctx:
+            delete_repository(999999, db=self.db)
+        self.assertEqual(ctx.exception.status_code, 404)
+
+    def test_delete_repository_success_with_cascade(self):
+        payload = GitHubRepositoryCreate(
+            url="https://github.com/test-org/delete-cascade-repo",
+            default_branch="main",
+        )
+        repo = connect_github_repository(payload, self.db)
+        repo_id = repo.id
+
+        # Add related SourceFile and Finding
+        sf = SourceFile(
+            repository_id=repo_id,
+            path="src/index.js",
+            sha="sha_del",
+            content="console.log('del');",
+            size=19,
+        )
+        finding = Finding(
+            repository_id=repo_id,
+            file_path="src/index.js",
+            line_number=1,
+            severity="warning",
+            category="style",
+            message="Unexpected console.log",
+            rule_id="JS-CONSOLE-LOG",
+        )
+        self.db.add_all([sf, finding])
+        self.db.commit()
+
+        # Verify records exist before delete
+        self.assertEqual(self.db.query(SourceFile).filter(SourceFile.repository_id == repo_id).count(), 1)
+        self.assertEqual(self.db.query(Finding).filter(Finding.repository_id == repo_id).count(), 1)
+
+        # Execute delete
+        res = delete_repository(repo_id, db=self.db)
+        self.assertEqual(res["status"], "ok")
+
+        # Verify repository and cascading records are gone
+        self.assertIsNone(self.db.get(Repository, repo_id))
+        self.assertEqual(self.db.query(SourceFile).filter(SourceFile.repository_id == repo_id).count(), 0)
+        self.assertEqual(self.db.query(Finding).filter(Finding.repository_id == repo_id).count(), 0)
 
 
 if __name__ == "__main__":
