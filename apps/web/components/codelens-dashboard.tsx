@@ -644,7 +644,9 @@ export function CodeLensDashboard() {
                   <Trash2 className="size-4" />
                 </div>
                 <div>
-                  <h2 className="font-medium text-zinc-100">Delete repository</h2>
+                  <h2 className="font-medium text-zinc-100">
+                    Delete repository
+                  </h2>
                   <p className="mt-0.5 text-xs text-zinc-500">
                     This action cannot be undone.
                   </p>
@@ -1113,16 +1115,20 @@ function RepositoriesContent({
   onIngest,
   onAnalyze,
   onViewFiles,
+  onDelete,
   ingestingRepoId,
   analyzingRepoId,
+  deletingRepoId,
 }: {
   repositories: RepoDetails[];
   onAdd: () => void;
   onIngest: (id: number, name: string) => void;
   onAnalyze: (id: number, name: string) => void;
   onViewFiles: (id: number) => void;
+  onDelete: (repo: RepoDetails) => void;
   ingestingRepoId: number | null;
   analyzingRepoId: number | null;
+  deletingRepoId: number | null;
 }) {
   return (
     <div className="flex flex-col gap-8">
@@ -1170,14 +1176,29 @@ function RepositoriesContent({
                   <span className="rounded bg-cyan-300/10 border border-cyan-300/20 px-2 py-0.5 font-mono text-[10px] text-cyan-300">
                     {repo.default_branch}
                   </span>
-                  <a
-                    href={repo.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="text-zinc-600 hover:text-zinc-400 text-xs flex items-center gap-1"
-                  >
-                    <GitBranch className="size-3.5" />
-                  </a>
+                  <div className="flex items-center gap-2">
+                    <a
+                      href={repo.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-zinc-600 hover:text-zinc-400 text-xs flex items-center gap-1"
+                      title="View on GitHub"
+                    >
+                      <GitBranch className="size-3.5" />
+                    </a>
+                    <button
+                      onClick={() => onDelete(repo)}
+                      disabled={deletingRepoId === repo.id}
+                      className="text-zinc-600 hover:text-rose-400 transition-colors disabled:opacity-50 cursor-pointer"
+                      title="Delete repository"
+                    >
+                      {deletingRepoId === repo.id ? (
+                        <Loader2 className="size-3.5 animate-spin text-rose-400" />
+                      ) : (
+                        <Trash2 className="size-3.5" />
+                      )}
+                    </button>
+                  </div>
                 </div>
                 <h3 className="mt-4 font-mono text-sm font-semibold text-zinc-100 truncate">
                   {repo.full_name}
