@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { api, ApiError } from "@/lib/api";
+import { calculateHealthScore, getHealthColor } from "@/lib/health";
 import type {
   AnalysisSummaryResponse,
   FindingFixResponse,
@@ -841,7 +842,9 @@ export function CodeLensDashboard() {
                           </span>
                         </div>
                         <p className="text-[11px] text-zinc-400 mt-1 leading-relaxed">
-                          The proposed fix has been applied to this in-memory preview session. No changes were written to SourceFile, PostgreSQL database, or GitHub repository.
+                          The proposed fix has been applied to this in-memory
+                          preview session. No changes were written to
+                          SourceFile, PostgreSQL database, or GitHub repository.
                         </p>
                       </div>
                     </div>
@@ -931,14 +934,21 @@ export function CodeLensDashboard() {
                   {/* Resulting Code Section */}
                   {fixResult.resulting_code && (
                     <div className="pt-2">
-                      <div className="text-xs font-medium text-zinc-400 mb-1.5 flex items-center gap-1.5">
-                        <FileCode2 className="size-3.5 text-cyan-400" />
-                        Resulting Code
                       <div className="text-xs font-medium text-zinc-400 mb-1.5 flex items-center justify-between">
                         <div className="flex items-center gap-1.5">
-                          <FileCode2 className={`size-3.5 ${isFixApplied ? "text-emerald-400" : "text-cyan-400"}`} />
-                          <span className={isFixApplied ? "text-emerald-300 font-semibold" : "text-zinc-300"}>
-                            {isFixApplied ? "Resulting Code (In-Memory Preview Applied)" : "Resulting Code Preview"}
+                          <FileCode2
+                            className={`size-3.5 ${isFixApplied ? "text-emerald-400" : "text-cyan-400"}`}
+                          />
+                          <span
+                            className={
+                              isFixApplied
+                                ? "text-emerald-300 font-semibold"
+                                : "text-zinc-300"
+                            }
+                          >
+                            {isFixApplied
+                              ? "Resulting Code (In-Memory Preview Applied)"
+                              : "Resulting Code Preview"}
                           </span>
                         </div>
                         {isFixApplied ? (
@@ -952,7 +962,6 @@ export function CodeLensDashboard() {
                           </span>
                         )}
                       </div>
-                      <pre className="rounded-lg border border-white/[0.08] bg-black/50 p-3 font-mono text-xs text-zinc-300 overflow-x-auto max-h-56 whitespace-pre-wrap">
                       <pre
                         className={`rounded-lg border p-3 font-mono text-xs text-zinc-300 overflow-x-auto max-h-56 whitespace-pre-wrap transition-all ${
                           isFixApplied
@@ -969,14 +978,6 @@ export function CodeLensDashboard() {
             </div>
 
             {/* Footer Actions */}
-            <div className="flex items-center justify-between p-4 px-6 border-t border-white/[0.08] bg-white/[0.02]">
-              <Button
-                onClick={handleCloseFindingModal}
-                variant="outline"
-                size="sm"
-              >
-                Close
-              </Button>
             <div className="flex flex-col gap-3 p-4 px-6 border-t border-white/[0.08] bg-white/[0.02]">
               {/* Confirmation state before applying fix */}
               {isConfirmingApply && (
@@ -988,7 +989,8 @@ export function CodeLensDashboard() {
                         Apply fix to in-memory preview?
                       </div>
                       <div className="text-[11px] text-zinc-400 mt-0.5 leading-relaxed">
-                        This will update the preview with the proposed fix. No changes will be written to PostgreSQL or GitHub.
+                        This will update the preview with the proposed fix. No
+                        changes will be written to PostgreSQL or GitHub.
                       </div>
                     </div>
                   </div>
@@ -1016,24 +1018,6 @@ export function CodeLensDashboard() {
                 </div>
               )}
 
-              <Button
-                onClick={handleGenerateFix}
-                disabled={isGeneratingFix}
-                size="sm"
-                className="bg-cyan-300 text-black hover:bg-cyan-200"
-              >
-                {isGeneratingFix ? (
-                  <>
-                    <Loader2 className="size-3.5 animate-spin mr-1.5" />
-                    Generating Fix...
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="size-3.5 mr-1.5" />
-                    {fixResult ? "Regenerate Fix" : "Generate Fix"}
-                  </>
-                )}
-              </Button>
               <div className="flex items-center justify-between">
                 <Button
                   onClick={handleCloseFindingModal}
@@ -1185,6 +1169,304 @@ function PageHeading({
   );
 }
 
+function RepositoryHealthCard({
+  findings,
+  repositories,
+  onNavigateFindings,
+}: {
+  findings: FindingResponse[];
+  repositories: RepoDetails[];
+  onNavigateFindings: () => void;
+}) {
+  const [selectedRepoId, setSelectedRepoId] = useState<number | "all">("all");
+
+  const activeFindings = useMemo(() => {
+    if (selectedRepoId === "all") return findings;
+    return findings.filter((f) => f.repository_id === selectedRepoId);
+  }, [findings, selectedRepoId]);
+
+  const health = useMemo(
+    () => calculateHealthScore(activeFindings),
+    [activeFindings],
+  );
+
+  const colors = getHealthColor(health.label);
+
+  // SVG Gauge calculations
+  const radius = 42;
+  const strokeWidth = 7;
+  const circumference = 2 * Math.PI * radius;
+  const strokeDashoffset = circumference - (health.score / 100) * circumference;
+
+  const selectedRepoName = useMemo(() => {
+    if (selectedRepoId === "all") return "All Repositories";
+    const found = repositories.find((r) => r.id === selectedRepoId);
+    return found ? found.name : "Repository";
+  }, [repositories, selectedRepoId]);
+
+  return (
+    <section className="rounded-xl border border-white/[0.08] bg-white/[0.025] p-5 sm:p-6 backdrop-blur-sm shadow-xl">
+      {/* Header with Title & Repository Selector */}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-white/[0.06] pb-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-cyan-300/70">
+              CodeLens Health Index
+            </span>
+            <span
+              className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-medium border ${colors.badge}`}
+            >
+              {health.label === "Excellent" || health.label === "Good" ? (
+                <ShieldCheck className="size-3" />
+              ) : health.label === "Fair" ? (
+                <AlertTriangle className="size-3" />
+              ) : (
+                <ShieldAlert className="size-3" />
+              )}
+              {health.label}
+            </span>
+          </div>
+          <h3 className="mt-1 text-base font-semibold text-zinc-100 flex items-center gap-2">
+            Repository Health Score
+            <span className="text-xs font-normal text-zinc-500 font-mono">
+              ({selectedRepoName})
+            </span>
+          </h3>
+        </div>
+
+        {/* Repository Filter Dropdown */}
+        {repositories.length > 0 && (
+          <div className="flex items-center gap-2">
+            <label
+              htmlFor="repo-health-select"
+              className="text-xs text-zinc-500 sr-only"
+            >
+              Filter by repository
+            </label>
+            <div className="relative">
+              <select
+                id="repo-health-select"
+                value={selectedRepoId}
+                onChange={(e) =>
+                  setSelectedRepoId(
+                    e.target.value === "all" ? "all" : Number(e.target.value),
+                  )
+                }
+                className="appearance-none rounded-lg border border-white/[0.1] bg-[#111315] px-3 py-1.5 pr-8 font-mono text-xs text-zinc-300 hover:border-white/[0.2] focus:border-cyan-400 focus:outline-none transition cursor-pointer"
+              >
+                <option value="all">
+                  All Connected Repositories ({findings.length} findings)
+                </option>
+                {repositories.map((repo) => (
+                  <option key={repo.id} value={repo.id}>
+                    {repo.full_name} ({repo.findingsCount || 0} findings)
+                  </option>
+                ))}
+              </select>
+              <ChevronDown className="pointer-events-none absolute right-2.5 top-1/2 -translate-y-1/2 size-3.5 text-zinc-500" />
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Main Health Card Content Grid */}
+      <div className="mt-6 grid gap-6 lg:grid-cols-12 items-center">
+        {/* Overall Score Circle & Label */}
+        <div className="lg:col-span-4 flex items-center gap-5 p-4 rounded-xl border border-white/[0.04] bg-black/20">
+          <div className="relative size-24 shrink-0 flex items-center justify-center">
+            <svg className="size-24 -rotate-90" viewBox="0 0 100 100">
+              <circle
+                cx="50"
+                cy="50"
+                r={radius}
+                className="stroke-zinc-800/80"
+                strokeWidth={strokeWidth}
+                fill="transparent"
+              />
+              <circle
+                cx="50"
+                cy="50"
+                r={radius}
+                stroke={colors.stroke}
+                strokeWidth={strokeWidth}
+                strokeDasharray={circumference}
+                strokeDashoffset={strokeDashoffset}
+                strokeLinecap="round"
+                fill="transparent"
+                className="transition-all duration-700 ease-out"
+              />
+            </svg>
+            <div className="absolute inset-0 flex flex-col items-center justify-center">
+              <span
+                className={`font-mono text-2xl font-bold tracking-tight ${colors.text}`}
+              >
+                {health.score}
+              </span>
+              <span className="font-mono text-[10px] text-zinc-500">/ 100</span>
+            </div>
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-1.5">
+              <span className={`text-base font-semibold ${colors.text}`}>
+                {health.label} Health
+              </span>
+            </div>
+            <p className="mt-1 text-xs text-zinc-400 leading-snug">
+              {health.totalFindings === 0
+                ? "Clean codebase. Zero detected static findings."
+                : `${health.totalFindings} active findings evaluated.`}
+            </p>
+            <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px] font-mono text-zinc-500">
+              {health.deductions.errors > 0 && (
+                <span className="text-red-400">
+                  −{health.deductions.errors} errors
+                </span>
+              )}
+              {health.deductions.warnings > 0 && (
+                <span className="text-amber-400">
+                  −{health.deductions.warnings} warn
+                </span>
+              )}
+              {health.deductions.info > 0 && (
+                <span className="text-cyan-400">
+                  −{health.deductions.info} info
+                </span>
+              )}
+              {health.totalFindings === 0 && (
+                <span className="text-emerald-400">No penalties</span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* Severity Metrics (Total findings, errors, warnings, info) */}
+        <div className="lg:col-span-4 grid grid-cols-2 gap-2.5">
+          <div className="rounded-lg border border-white/[0.05] bg-black/20 p-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-zinc-400 font-medium">
+                Total Findings
+              </span>
+              <ShieldCheck className="size-3.5 text-zinc-400" />
+            </div>
+            <div className="mt-1 font-mono text-xl font-bold text-zinc-100">
+              {health.totalFindings}
+            </div>
+            <p className="text-[10px] text-zinc-500 mt-0.5">Across codebase</p>
+          </div>
+
+          <div className="rounded-lg border border-red-500/20 bg-red-950/10 p-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-red-300 font-medium">
+                Errors
+              </span>
+              <AlertCircle className="size-3.5 text-red-400" />
+            </div>
+            <div className="mt-1 font-mono text-xl font-bold text-red-400">
+              {health.errorCount}
+            </div>
+            <p className="text-[10px] text-red-400/80 mt-0.5">−15 pts each</p>
+          </div>
+
+          <div className="rounded-lg border border-amber-500/20 bg-amber-950/10 p-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-amber-300 font-medium">
+                Warnings
+              </span>
+              <AlertTriangle className="size-3.5 text-amber-400" />
+            </div>
+            <div className="mt-1 font-mono text-xl font-bold text-amber-400">
+              {health.warningCount}
+            </div>
+            <p className="text-[10px] text-amber-400/80 mt-0.5">−5 pts each</p>
+          </div>
+
+          <div className="rounded-lg border border-cyan-500/20 bg-cyan-950/10 p-3">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-cyan-300 font-medium">
+                Info Notes
+              </span>
+              <Info className="size-3.5 text-cyan-400" />
+            </div>
+            <div className="mt-1 font-mono text-xl font-bold text-cyan-400">
+              {health.infoCount}
+            </div>
+            <p className="text-[10px] text-cyan-400/80 mt-0.5">−1 pt each</p>
+          </div>
+        </div>
+
+        {/* Category Breakdown */}
+        <div className="lg:col-span-4 rounded-xl border border-white/[0.05] bg-black/20 p-4">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs font-medium text-zinc-200 flex items-center gap-1.5">
+              <Activity className="size-3.5 text-cyan-400" />
+              Category Breakdown
+            </span>
+            <button
+              onClick={onNavigateFindings}
+              className="text-[11px] text-cyan-400 hover:text-cyan-300 transition"
+            >
+              Explore →
+            </button>
+          </div>
+
+          {health.categories.length === 0 ? (
+            <div className="py-4 text-center text-xs text-zinc-500">
+              No category issues detected. 100% clean.
+            </div>
+          ) : (
+            <div className="space-y-2.5">
+              {health.categories.slice(0, 4).map((cat) => {
+                let barColor = "bg-cyan-400";
+                if (cat.category === "security") barColor = "bg-red-400";
+                else if (cat.category === "bug") barColor = "bg-rose-400";
+                else if (cat.category === "syntax") barColor = "bg-orange-400";
+                else if (cat.category === "complexity")
+                  barColor = "bg-purple-400";
+                else if (cat.category === "maintainability")
+                  barColor = "bg-blue-400";
+                else if (cat.category === "style") barColor = "bg-emerald-400";
+
+                return (
+                  <div key={cat.category} className="space-y-1">
+                    <div className="flex items-center justify-between text-[11px]">
+                      <span className="capitalize text-zinc-300 font-mono">
+                        {cat.category}
+                      </span>
+                      <span className="font-mono text-zinc-400">
+                        {cat.count} {cat.count === 1 ? "finding" : "findings"} (
+                        {cat.percentage}%)
+                      </span>
+                    </div>
+                    <div className="h-1.5 w-full rounded-full bg-white/[0.06] overflow-hidden">
+                      <div
+                        className={`h-full ${barColor} rounded-full transition-all duration-500`}
+                        style={{ width: `${Math.max(6, cat.percentage)}%` }}
+                      />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Transparent Formula Note Footer */}
+      <div className="mt-5 pt-3.5 border-t border-white/[0.05] flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px] text-zinc-500 font-mono">
+        <div className="flex items-center gap-1.5">
+          <span className="inline-block size-1 rounded-full bg-cyan-400" />
+          <span>
+            Scoring Formula: Base 100 − (Errors × 15) − (Warnings × 5) − (Info ×
+            1), clamped [0, 100]
+          </span>
+        </div>
+        <div className="text-zinc-600">Deterministic · No AI inference</div>
+      </div>
+    </section>
+  );
+}
+
 function DashboardContent({
   repositories,
   findings,
@@ -1225,6 +1507,13 @@ function DashboardContent({
             Add repository
           </Button>
         }
+      />
+
+      {/* Repository Health Card */}
+      <RepositoryHealthCard
+        findings={findings}
+        repositories={repositories}
+        onNavigateFindings={onFindings}
       />
 
       {/* Stats Cards */}
@@ -1285,44 +1574,58 @@ function DashboardContent({
                 to begin.
               </div>
             ) : (
-              repositories.slice(0, 5).map((repo) => (
-                <div
-                  key={repo.id}
-                  className="flex items-center gap-3 rounded-lg px-2 py-3 hover:bg-white/[0.035] transition"
-                >
-                  <div className="size-2 rounded-full bg-cyan-400" />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <p className="truncate text-sm text-zinc-200">
-                        {repo.full_name}
+              repositories.slice(0, 5).map((repo) => {
+                const repoFindings = findings.filter(
+                  (f) => f.repository_id === repo.id,
+                );
+                const repoHealth = calculateHealthScore(repoFindings);
+                const repoColors = getHealthColor(repoHealth.label);
+
+                return (
+                  <div
+                    key={repo.id}
+                    className="flex items-center gap-3 rounded-lg px-2 py-3 hover:bg-white/[0.035] transition"
+                  >
+                    <div className="size-2 rounded-full bg-cyan-400" />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="truncate text-sm text-zinc-200">
+                          {repo.full_name}
+                        </p>
+                        <span className="rounded bg-white/[0.06] px-1.5 py-0.5 font-mono text-[10px] text-zinc-500">
+                          {repo.default_branch}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs text-zinc-600">
+                        {repo.filesCount || 0} source files stored
                       </p>
-                      <span className="rounded bg-white/[0.06] px-1.5 py-0.5 font-mono text-[10px] text-zinc-500">
-                        {repo.default_branch}
-                      </span>
                     </div>
-                    <p className="mt-1 text-xs text-zinc-600">
-                      {repo.filesCount || 0} source files stored
-                    </p>
+                    <div className="text-right flex items-center gap-2">
+                      <span
+                        className={`hidden sm:inline-flex items-center rounded px-1.5 py-0.5 font-mono text-[10px] border ${repoColors.badge}`}
+                        title={`Health: ${repoHealth.label}`}
+                      >
+                        {repoHealth.score}/100 {repoHealth.label}
+                      </span>
+                      <span className="text-xs text-zinc-400">
+                        {repo.findingsCount || 0} findings
+                      </span>
+                      <Button
+                        size="xs"
+                        variant="outline"
+                        onClick={() => onAnalyze(repo.id, repo.full_name)}
+                        disabled={analyzingRepoId === repo.id}
+                      >
+                        {analyzingRepoId === repo.id ? (
+                          <Loader2 className="size-3 animate-spin" />
+                        ) : (
+                          "Analyze"
+                        )}
+                      </Button>
+                    </div>
                   </div>
-                  <div className="text-right flex items-center gap-2">
-                    <span className="text-xs text-zinc-400">
-                      {repo.findingsCount || 0} findings
-                    </span>
-                    <Button
-                      size="xs"
-                      variant="outline"
-                      onClick={() => onAnalyze(repo.id, repo.full_name)}
-                      disabled={analyzingRepoId === repo.id}
-                    >
-                      {analyzingRepoId === repo.id ? (
-                        <Loader2 className="size-3 animate-spin" />
-                      ) : (
-                        "Analyze"
-                      )}
-                    </Button>
-                  </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
         </section>
