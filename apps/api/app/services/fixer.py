@@ -49,6 +49,81 @@ def compute_unified_diff(original: str, fixed: str, file_path: str = "file") -> 
     return "".join(diff)
 
 
+def apply_fix_to_content(
+    source_content: str,
+    original_code: str,
+    fixed_code: str,
+    line_number: int | None = None,
+) -> str:
+    """Apply an AI fix to source code content IN MEMORY only.
+
+    Does NOT modify database records or files on disk.
+    Preserves existing indentation and line endings.
+    Supports both replacement and deletion-only fixes.
+
+    Args:
+        source_content: The full content of the source file.
+        original_code: The original code snippet being replaced/removed.
+        fixed_code: The new replacement code (or empty string for deletion).
+        line_number: Optional 1-indexed line number of the finding.
+
+    Returns:
+        The updated source content with the fix applied in memory.
+    """
+    if not source_content:
+        return fixed_code
+
+    is_deletion = not fixed_code or not fixed_code.strip()
+    newline = "\r\n" if "\r\n" in source_content else "\n"
+
+    # Strategy 1: Exact substring match in source_content
+    if original_code and original_code in source_content:
+        if is_deletion:
+            # If original_code has a trailing newline in source, consume it cleanly
+            pattern_with_nl = original_code + newline
+            if pattern_with_nl in source_content:
+                return source_content.replace(pattern_with_nl, "", 1)
+            return source_content.replace(original_code, "", 1)
+        return source_content.replace(original_code, fixed_code, 1)
+
+    # Strategy 2: Line-based replacement around line_number
+    lines = source_content.splitlines(keepends=True)
+    if line_number is not None and 1 <= line_number <= len(lines):
+        target_idx = line_number - 1
+        orig_stripped = original_code.strip() if original_code else ""
+        orig_lines = [l.strip() for l in original_code.splitlines() if l.strip()]
+
+        num_orig = len(orig_lines) if orig_lines else 1
+        window_slice = lines[target_idx : target_idx + num_orig]
+        window_stripped = [l.strip() for l in window_slice if l.strip()]
+
+        if (orig_stripped and orig_stripped in lines[target_idx]) or (window_stripped == orig_lines):
+            if is_deletion:
+                del lines[target_idx : target_idx + num_orig]
+            else:
+                replacement = fixed_code
+                if not replacement.endswith("\n") and not replacement.endswith("\r\n"):
+                    replacement += newline
+                lines[target_idx : target_idx + num_orig] = [replacement]
+            return "".join(lines)
+
+    # Strategy 3: Single-line stripped match anywhere in source
+    if original_code and original_code.strip():
+        stripped = original_code.strip()
+        for idx, line in enumerate(lines):
+            if stripped in line:
+                if is_deletion:
+                    if line.strip() == stripped:
+                        del lines[idx]
+                    else:
+                        lines[idx] = line.replace(stripped, "")
+                else:
+                    lines[idx] = line.replace(stripped, fixed_code.strip())
+                return "".join(lines)
+
+    return source_content
+
+
 def compute_resulting_code(
     source_content: str,
     original_code: str,
@@ -60,26 +135,14 @@ def compute_resulting_code(
 
     This function operates strictly in memory and does not modify any persistent storage.
     """
-    if not source_content:
-        return fixed_code
+    applied_content = apply_fix_to_content(
+        source_content=source_content,
+        original_code=original_code,
+        fixed_code=fixed_code,
+        line_number=line_number,
+    )
 
-    applied_content = source_content
-    # 1. Direct substring replacement if original_code is found in source_content
-    if original_code and original_code in source_content:
-        applied_content = source_content.replace(original_code, fixed_code, 1)
-    elif original_code and original_code.strip() in source_content:
-        applied_content = source_content.replace(original_code.strip(), fixed_code.strip(), 1)
-    elif line_number is not None and line_number > 0:
-        lines = source_content.splitlines()
-        idx = line_number - 1
-        if 0 <= idx < len(lines):
-            if fixed_code.strip():
-                lines[idx] = fixed_code.rstrip("\n")
-            else:
-                lines.pop(idx)
-            applied_content = "\n".join(lines)
-
-    # 2. Extract context window from the updated content around line_number
+    # Extract context window from the updated content around line_number
     applied_lines = applied_content.splitlines()
     if not applied_lines:
         return "(empty file)"

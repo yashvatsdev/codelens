@@ -14,6 +14,7 @@ from app.schemas.finding import FindingFixResponse
 from app.services.fixer import (
     FixerError,
     GeminiNotConfiguredError,
+    apply_fix_to_content,
     build_fixer_prompt,
     compute_resulting_code,
     compute_unified_diff,
@@ -317,5 +318,172 @@ class TestFixerServiceAndEndpoint(unittest.TestCase):
         self.assertEqual(finding.line_number, 2)
 
 
+
+class TestApplyFixToContent(unittest.TestCase):
+    """Unit tests for apply_fix_to_content in-memory transformation."""
+
+    def test_apply_fix_replacement_exact_match(self):
+        source = "def calc():\n    return eval(expr)\n"
+        result = apply_fix_to_content(
+            source_content=source,
+            original_code="eval(expr)",
+            fixed_code="ast.literal_eval(expr)",
+            line_number=2,
+        )
+        expected = "def calc():\n    return ast.literal_eval(expr)\n"
+        self.assertEqual(result, expected)
+
+    def test_apply_fix_replacement_preserves_indentation(self):
+        source = (
+            "class Service:\n"
+            "    def execute(self):\n"
+            "        result = eval(cmd)\n"
+            "        return result\n"
+        )
+        result = apply_fix_to_content(
+            source_content=source,
+            original_code="eval(cmd)",
+            fixed_code="safe_eval(cmd)",
+            line_number=3,
+        )
+        expected = (
+            "class Service:\n"
+            "    def execute(self):\n"
+            "        result = safe_eval(cmd)\n"
+            "        return result\n"
+        )
+        self.assertEqual(result, expected)
+
+    def test_apply_fix_replacement_multiline(self):
+        source = (
+            "def handle():\n"
+            "    var1 = 1\n"
+            "    var2 = 2\n"
+            "    return var1 + var2\n"
+        )
+        orig = "    var1 = 1\n    var2 = 2"
+        fixed = "    var_total = 3"
+        result = apply_fix_to_content(
+            source_content=source,
+            original_code=orig,
+            fixed_code=fixed,
+            line_number=2,
+        )
+        expected = (
+            "def handle():\n"
+            "    var_total = 3\n"
+            "    return var1 + var2\n"
+        )
+        self.assertEqual(result, expected)
+
+    def test_apply_fix_deletion_exact_match_no_blank_lines(self):
+        source = (
+            "function run() {\n"
+            "  debugger;\n"
+            "  return 42;\n"
+            "}\n"
+        )
+        result = apply_fix_to_content(
+            source_content=source,
+            original_code="  debugger;\n",
+            fixed_code="",
+            line_number=2,
+        )
+        expected = (
+            "function run() {\n"
+            "  return 42;\n"
+            "}\n"
+        )
+        self.assertEqual(result, expected)
+
+    def test_apply_fix_deletion_whitespace_fixed_code(self):
+        source = (
+            "def process():\n"
+            "    # TODO: remove\n"
+            "    print('debug')\n"
+            "    return True\n"
+        )
+        result = apply_fix_to_content(
+            source_content=source,
+            original_code="    print('debug')",
+            fixed_code="   \n  ",
+            line_number=3,
+        )
+        expected = (
+            "def process():\n"
+            "    # TODO: remove\n"
+            "    return True\n"
+        )
+        self.assertEqual(result, expected)
+
+    def test_apply_fix_preserves_crlf_line_endings_replacement(self):
+        source = "def run():\r\n    x = eval(s)\r\n    return x\r\n"
+        result = apply_fix_to_content(
+            source_content=source,
+            original_code="eval(s)",
+            fixed_code="int(s)",
+            line_number=2,
+        )
+        expected = "def run():\r\n    x = int(s)\r\n    return x\r\n"
+        self.assertEqual(result, expected)
+        self.assertNotIn("\n\r", result)
+        self.assertEqual(result.count("\r\n"), 3)
+
+    def test_apply_fix_preserves_crlf_line_endings_deletion(self):
+        source = "line 1\r\nline 2 remove me\r\nline 3\r\n"
+        result = apply_fix_to_content(
+            source_content=source,
+            original_code="line 2 remove me\r\n",
+            fixed_code="",
+            line_number=2,
+        )
+        expected = "line 1\r\nline 3\r\n"
+        self.assertEqual(result, expected)
+        self.assertEqual(result.count("\r\n"), 2)
+
+    def test_apply_fix_line_number_fallback(self):
+        # Even if original_code has slight whitespace differences from the source line
+        source = "line 1\n    target_code(123)\nline 3\n"
+        result = apply_fix_to_content(
+            source_content=source,
+            original_code="target_code(123)",
+            fixed_code="    fixed_code(123)",
+            line_number=2,
+        )
+        self.assertIn("fixed_code(123)", result)
+        self.assertNotIn("target_code(123)", result)
+
+    def test_apply_fix_line_number_deletion_fallback(self):
+        source = "alpha\nbeta to delete\ngamma\n"
+        result = apply_fix_to_content(
+            source_content=source,
+            original_code="beta to delete",
+            fixed_code="",
+            line_number=2,
+        )
+        expected = "alpha\ngamma\n"
+        self.assertEqual(result, expected)
+
+    def test_apply_fix_no_match_returns_original_content(self):
+        source = "print('hello')\n"
+        result = apply_fix_to_content(
+            source_content=source,
+            original_code="unknown_func()",
+            fixed_code="replacement()",
+            line_number=999,
+        )
+        self.assertEqual(result, source)
+
+    def test_apply_fix_empty_source_returns_fixed(self):
+        result = apply_fix_to_content(
+            source_content="",
+            original_code="something",
+            fixed_code="replacement",
+            line_number=1,
+        )
+        self.assertEqual(result, "replacement")
+
+
 if __name__ == "__main__":
     unittest.main()
+
