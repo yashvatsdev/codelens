@@ -3,6 +3,7 @@ import type {
   FindingExplanationResponse,
   FindingFixResponse,
   FindingResponse,
+  FindingTestResponse,
   GitHubRepositoryCreate,
   HealthResponse,
   IngestionResponse,
@@ -105,6 +106,13 @@ export const api = {
   fixFinding: (repositoryId: number, findingId: number) =>
     request<FindingFixResponse>(
       `/repositories/${repositoryId}/findings/${findingId}/fix`,
+      {
+        method: "POST",
+      },
+    ),
+  generateTest: (repositoryId: number, findingId: number) =>
+    request<FindingTestResponse>(
+      `/repositories/${repositoryId}/findings/${findingId}/test`,
       {
         method: "POST",
       },

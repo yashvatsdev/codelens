@@ -90,3 +90,12 @@ export interface FindingFixResponse {
   diff?: string | null;
   resulting_code?: string | null;
 }
+
+export interface FindingTestResponse {
+  finding_id: number;
+  test_framework: string;
+  test_file: string;
+  test_code: string;
+  explanation: string;
+}
+

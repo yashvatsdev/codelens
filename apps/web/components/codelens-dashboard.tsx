@@ -7,10 +7,12 @@ import {
   AlertTriangle,
   BarChart3,
   Bell,
+  Check,
   ChevronDown,
   ChevronRight,
   CircleCheck,
   Code2,
+  Copy,
   FileCode2,
   Filter,
   FolderGit2,
@@ -38,6 +40,7 @@ import type {
   AnalysisSummaryResponse,
   FindingFixResponse,
   FindingResponse,
+  FindingTestResponse,
   HealthResponse,
   IngestionResponse,
   RepositoryResponse,
@@ -166,6 +169,13 @@ export function CodeLensDashboard() {
   const [fixError, setFixError] = useState<string | null>(null);
   const [isConfirmingApply, setIsConfirmingApply] = useState(false);
   const [isFixApplied, setIsFixApplied] = useState(false);
+
+  // AI Test state for selected finding
+  const [isGeneratingTest, setIsGeneratingTest] = useState(false);
+  const [testResult, setTestResult] = useState<FindingTestResponse | null>(null);
+  const [testError, setTestError] = useState<string | null>(null);
+  const [testCopied, setTestCopied] = useState(false);
+
 
   // Load repositories, findings, and health from backend
   const loadData = async () => {
@@ -321,6 +331,40 @@ export function CodeLensDashboard() {
     }
   };
 
+  // AI Test action for selected finding
+  const handleGenerateTest = async () => {
+    if (!selectedFinding || isGeneratingTest) return;
+    setIsGeneratingTest(true);
+    setTestError(null);
+    setTestCopied(false);
+    try {
+      const res = await api.generateTest(
+        selectedFinding.repository_id,
+        selectedFinding.id,
+      );
+      setTestResult(res);
+    } catch (err) {
+      setTestError(
+        err instanceof ApiError
+          ? err.message
+          : "Failed to generate test. Please check your Gemini API key and try again.",
+      );
+    } finally {
+      setIsGeneratingTest(false);
+    }
+  };
+
+  const handleCopyTest = async () => {
+    if (!testResult?.test_code) return;
+    try {
+      await navigator.clipboard.writeText(testResult.test_code);
+      setTestCopied(true);
+      setTimeout(() => setTestCopied(false), 2000);
+    } catch {
+      // ignore clipboard errors
+    }
+  };
+
   const handleCloseFindingModal = () => {
     setSelectedFinding(null);
     setFixResult(null);
@@ -328,6 +372,10 @@ export function CodeLensDashboard() {
     setIsGeneratingFix(false);
     setIsConfirmingApply(false);
     setIsFixApplied(false);
+    setTestResult(null);
+    setTestError(null);
+    setIsGeneratingTest(false);
+    setTestCopied(false);
   };
 
   const filteredFindings = useMemo(() => {
@@ -569,6 +617,10 @@ export function CodeLensDashboard() {
                     setFixError(null);
                     setIsConfirmingApply(false);
                     setIsFixApplied(false);
+                    setTestResult(null);
+                    setTestError(null);
+                    setIsGeneratingTest(false);
+                    setTestCopied(false);
                   }}
                 />
               )}
@@ -827,6 +879,83 @@ export function CodeLensDashboard() {
                 </div>
               )}
 
+              {/* Test Error state */}
+              {testError && (
+                <div className="rounded-lg border border-rose-500/20 bg-rose-500/10 p-3.5 text-xs text-rose-300 flex items-start gap-2.5">
+                  <AlertCircle className="size-4 shrink-0 mt-0.5 text-rose-400" />
+                  <div className="leading-relaxed">{testError}</div>
+                </div>
+              )}
+
+              {/* Generating Test loading indicator */}
+              {isGeneratingTest && !testResult && (
+                <div className="rounded-lg border border-white/[0.06] bg-black/30 p-4 flex items-center gap-3 text-xs text-zinc-400 animate-in fade-in duration-150">
+                  <Loader2 className="size-4 animate-spin text-purple-400" />
+                  <span>Generating targeted unit test with Gemini...</span>
+                </div>
+              )}
+
+              {/* Test result display */}
+              {testResult && (
+                <div className="space-y-4 pt-2">
+                  {/* Explanation & metadata */}
+                  <div className="rounded-lg border border-purple-500/20 bg-purple-950/20 p-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2">
+                      <div className="text-xs font-semibold text-purple-300 flex items-center gap-1.5">
+                        <Sparkles className="size-3.5" />
+                        AI Generated Unit Test
+                      </div>
+                      <div className="flex items-center gap-2 font-mono text-[11px]">
+                        <span className="rounded bg-purple-500/20 px-2 py-0.5 text-purple-300 border border-purple-500/30">
+                          {testResult.test_framework}
+                        </span>
+                        <span className="rounded bg-white/[0.06] px-2 py-0.5 text-zinc-400 border border-white/[0.08]">
+                          {testResult.test_file}
+                        </span>
+                      </div>
+                    </div>
+                    <p className="text-xs leading-relaxed text-zinc-300 whitespace-pre-wrap">
+                      {testResult.explanation}
+                    </p>
+                  </div>
+
+                  {/* Generated test code */}
+                  <div>
+                    <div className="text-xs font-medium text-zinc-400 mb-1.5 flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <Code2 className="size-3.5 text-purple-400" />
+                        <span>Generated Test Code</span>
+                        <span className="font-mono text-[10px] text-zinc-500">
+                          ({testResult.test_file})
+                        </span>
+                      </div>
+                      <Button
+                        onClick={handleCopyTest}
+                        size="xs"
+                        variant="outline"
+                        className="border-white/[0.1] text-zinc-300 hover:bg-white/[0.05] h-6 text-[11px] font-mono"
+                      >
+                        {testCopied ? (
+                          <>
+                            <Check className="size-3 mr-1 text-emerald-400" />
+                            <span className="text-emerald-400">Copied!</span>
+                          </>
+                        ) : (
+                          <>
+                            <Copy className="size-3 mr-1" />
+                            Copy Test
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                    <pre className="rounded-lg border border-white/[0.08] bg-black/60 p-3 font-mono text-xs text-zinc-300 overflow-x-auto max-h-64 whitespace-pre-wrap">
+                      <code>{testResult.test_code}</code>
+                    </pre>
+                  </div>
+                </div>
+              )}
+
+
               {/* Fix result display */}
               {fixResult && (
                 <div className="space-y-4 pt-2">
@@ -1027,7 +1156,28 @@ export function CodeLensDashboard() {
                   Close
                 </Button>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  {/* Generate Test button */}
+                  <Button
+                    onClick={handleGenerateTest}
+                    disabled={isGeneratingTest}
+                    size="sm"
+                    variant="outline"
+                    className="border-white/[0.1] text-zinc-300 hover:bg-white/[0.05]"
+                  >
+                    {isGeneratingTest ? (
+                      <>
+                        <Loader2 className="size-3.5 animate-spin mr-1.5" />
+                        {testResult ? "Regenerating..." : "Generating Test..."}
+                      </>
+                    ) : (
+                      <>
+                        <Code2 className="size-3.5 mr-1.5 text-purple-400" />
+                        {testResult ? "Regenerate Test" : "Generate Test"}
+                      </>
+                    )}
+                  </Button>
+
                   {/* Apply Fix button beside Regenerate Fix */}
                   {fixResult && (
                     <>
