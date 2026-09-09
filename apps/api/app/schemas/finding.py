@@ -56,4 +56,20 @@ class FindingTestResponse(BaseModel):
     explanation: str
 
 
+class PRFindingResponse(BaseModel):
+    """A single static analysis finding from a PR review (no database ID)."""
+    file_path: str
+    line_number: int | None = None
+    severity: str = Field(..., description="Finding severity (e.g. info, warning, error)")
+    category: str = Field(..., description="Finding category (e.g. security, style, bug)")
+    message: str = Field(..., description="Description of the finding")
+    rule_id: str = Field(..., description="Identifier for the rule triggered")
 
+
+class PRReviewResponse(BaseModel):
+    """Summary returned after reviewing a GitHub Pull Request."""
+    repository_id: int
+    pull_request_number: int
+    files_changed: int
+    files_analyzed: int
+    findings: list[PRFindingResponse] = []

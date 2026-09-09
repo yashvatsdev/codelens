@@ -13,6 +13,7 @@ from app.schemas.finding import (
     FindingFixResponse,
     FindingResponse,
     FindingTestResponse,
+    PRReviewResponse,
 )
 from app.schemas.repository import (
     GitHubMetadataRequest,
@@ -48,6 +49,10 @@ from app.services.test_generator import (
     generate_test,
 )
 from app.services.ingestion import ingest_repository
+from app.services.pr_reviewer import (
+    PRNotFoundError,
+    review_pull_request,
+)
 
 router = APIRouter(prefix="/repositories", tags=["repositories"])
 
@@ -537,4 +542,50 @@ def generate_test_for_finding_endpoint(
         )
 
 
+@router.post(
+    "/{repository_id}/pull-requests/{pull_request_number}/review",
+    response_model=PRReviewResponse,
+)
+def review_pull_request_endpoint(
+    repository_id: int,
+    pull_request_number: int,
+    db: Session = Depends(get_db),
+):
+    """Review a GitHub Pull Request by analyzing its changed files.
 
+    Fetches the files changed in the specified PR, runs CodeLens static
+    analyzers on supported file types, and returns findings in memory.
+
+    Nothing is written to the database.
+    """
+    repository = db.get(Repository, repository_id)
+    if not repository:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Repository with id {repository_id} not found",
+        )
+
+    try:
+        result = review_pull_request(
+            owner=repository.owner,
+            repo=repository.name,
+            pr_number=pull_request_number,
+            repository_id=repository.id,
+        )
+    except PRNotFoundError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Pull request #{pull_request_number} not found: {e}",
+        )
+    except GitHubRateLimitError as e:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=str(e),
+        )
+    except GitHubServiceError as e:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(e),
+        )
+
+    return result
