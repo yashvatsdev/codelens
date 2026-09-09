@@ -163,6 +163,8 @@ export function CodeLensDashboard() {
   const [isGeneratingFix, setIsGeneratingFix] = useState(false);
   const [fixResult, setFixResult] = useState<FindingFixResponse | null>(null);
   const [fixError, setFixError] = useState<string | null>(null);
+  const [isConfirmingApply, setIsConfirmingApply] = useState(false);
+  const [isFixApplied, setIsFixApplied] = useState(false);
 
   // Load repositories, findings, and health from backend
   const loadData = async () => {
@@ -299,6 +301,8 @@ export function CodeLensDashboard() {
     if (!selectedFinding || isGeneratingFix) return;
     setIsGeneratingFix(true);
     setFixError(null);
+    setIsConfirmingApply(false);
+    setIsFixApplied(false);
     try {
       const res = await api.fixFinding(
         selectedFinding.repository_id,
@@ -321,6 +325,8 @@ export function CodeLensDashboard() {
     setFixResult(null);
     setFixError(null);
     setIsGeneratingFix(false);
+    setIsConfirmingApply(false);
+    setIsFixApplied(false);
   };
 
   const filteredFindings = useMemo(() => {
@@ -560,6 +566,8 @@ export function CodeLensDashboard() {
                     setSelectedFinding(finding);
                     setFixResult(null);
                     setFixError(null);
+                    setIsConfirmingApply(false);
+                    setIsFixApplied(false);
                   }}
                 />
               )}
@@ -821,6 +829,24 @@ export function CodeLensDashboard() {
               {/* Fix result display */}
               {fixResult && (
                 <div className="space-y-4 pt-2">
+                  {/* Success State when Fix is Applied */}
+                  {isFixApplied && (
+                    <div className="rounded-lg border border-emerald-500/30 bg-emerald-950/25 p-3.5 flex items-start gap-3 animate-in fade-in duration-200">
+                      <CircleCheck className="size-4 text-emerald-400 shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <div className="text-xs font-semibold text-emerald-300 flex items-center gap-2">
+                          <span>Fix Applied to In-Memory Preview</span>
+                          <span className="rounded bg-emerald-500/20 px-1.5 py-0.5 text-[10px] font-mono text-emerald-300 border border-emerald-500/30">
+                            Preview Active
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-zinc-400 mt-1 leading-relaxed">
+                          The proposed fix has been applied to this in-memory preview session. No changes were written to SourceFile, PostgreSQL database, or GitHub repository.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
                   {/* Explanation */}
                   <div className="rounded-lg border border-cyan-500/20 bg-cyan-950/20 p-4">
                     <div className="text-xs font-semibold text-cyan-300 flex items-center gap-1.5 mb-1.5">
@@ -908,8 +934,32 @@ export function CodeLensDashboard() {
                       <div className="text-xs font-medium text-zinc-400 mb-1.5 flex items-center gap-1.5">
                         <FileCode2 className="size-3.5 text-cyan-400" />
                         Resulting Code
+                      <div className="text-xs font-medium text-zinc-400 mb-1.5 flex items-center justify-between">
+                        <div className="flex items-center gap-1.5">
+                          <FileCode2 className={`size-3.5 ${isFixApplied ? "text-emerald-400" : "text-cyan-400"}`} />
+                          <span className={isFixApplied ? "text-emerald-300 font-semibold" : "text-zinc-300"}>
+                            {isFixApplied ? "Resulting Code (In-Memory Preview Applied)" : "Resulting Code Preview"}
+                          </span>
+                        </div>
+                        {isFixApplied ? (
+                          <span className="rounded bg-emerald-500/20 px-2 py-0.5 font-mono text-[10px] text-emerald-300 border border-emerald-500/30 flex items-center gap-1">
+                            <CircleCheck className="size-3" />
+                            Preview Active
+                          </span>
+                        ) : (
+                          <span className="text-[11px] text-zinc-500">
+                            Preview of applied changes
+                          </span>
+                        )}
                       </div>
                       <pre className="rounded-lg border border-white/[0.08] bg-black/50 p-3 font-mono text-xs text-zinc-300 overflow-x-auto max-h-56 whitespace-pre-wrap">
+                      <pre
+                        className={`rounded-lg border p-3 font-mono text-xs text-zinc-300 overflow-x-auto max-h-56 whitespace-pre-wrap transition-all ${
+                          isFixApplied
+                            ? "border-emerald-500/40 bg-emerald-950/15 shadow-[0_0_20px_rgba(16,185,129,0.1)]"
+                            : "border-white/[0.08] bg-black/50"
+                        }`}
+                      >
                         <code>{fixResult.resulting_code}</code>
                       </pre>
                     </div>
@@ -927,6 +977,44 @@ export function CodeLensDashboard() {
               >
                 Close
               </Button>
+            <div className="flex flex-col gap-3 p-4 px-6 border-t border-white/[0.08] bg-white/[0.02]">
+              {/* Confirmation state before applying fix */}
+              {isConfirmingApply && (
+                <div className="rounded-lg border border-amber-500/30 bg-amber-950/25 p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs animate-in fade-in duration-150">
+                  <div className="flex items-start gap-2 text-amber-200">
+                    <AlertCircle className="size-4 text-amber-400 shrink-0 mt-0.5" />
+                    <div>
+                      <div className="font-semibold text-amber-300">
+                        Apply fix to in-memory preview?
+                      </div>
+                      <div className="text-[11px] text-zinc-400 mt-0.5 leading-relaxed">
+                        This will update the preview with the proposed fix. No changes will be written to PostgreSQL or GitHub.
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => setIsConfirmingApply(false)}
+                      className="h-7 text-xs text-zinc-400 hover:text-zinc-200"
+                    >
+                      Cancel
+                    </Button>
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setIsConfirmingApply(false);
+                        setIsFixApplied(true);
+                      }}
+                      className="h-7 text-xs bg-emerald-500 text-black hover:bg-emerald-400 font-medium"
+                    >
+                      <CircleCheck className="size-3.5 mr-1" />
+                      Confirm Apply
+                    </Button>
+                  </div>
+                </div>
+              )}
 
               <Button
                 onClick={handleGenerateFix}
@@ -946,6 +1034,68 @@ export function CodeLensDashboard() {
                   </>
                 )}
               </Button>
+              <div className="flex items-center justify-between">
+                <Button
+                  onClick={handleCloseFindingModal}
+                  variant="outline"
+                  size="sm"
+                >
+                  Close
+                </Button>
+
+                <div className="flex items-center gap-2">
+                  {/* Apply Fix button beside Regenerate Fix */}
+                  {fixResult && (
+                    <>
+                      {isFixApplied ? (
+                        <Button
+                          onClick={() => setIsFixApplied(false)}
+                          variant="outline"
+                          size="sm"
+                          className="border-emerald-500/40 text-emerald-300 hover:bg-emerald-950/30"
+                          title="Click to revert preview to original code"
+                        >
+                          <CircleCheck className="size-3.5 mr-1.5 text-emerald-400" />
+                          Applied (Revert)
+                        </Button>
+                      ) : (
+                        <Button
+                          onClick={() => setIsConfirmingApply(true)}
+                          disabled={isGeneratingFix || isConfirmingApply}
+                          size="sm"
+                          className="bg-emerald-500 text-black hover:bg-emerald-400 font-medium"
+                        >
+                          <CircleCheck className="size-3.5 mr-1.5" />
+                          Apply Fix
+                        </Button>
+                      )}
+                    </>
+                  )}
+
+                  <Button
+                    onClick={handleGenerateFix}
+                    disabled={isGeneratingFix}
+                    size="sm"
+                    className={
+                      fixResult
+                        ? "border border-white/[0.1] bg-white/[0.05] text-zinc-300 hover:bg-white/[0.1]"
+                        : "bg-cyan-300 text-black hover:bg-cyan-200"
+                    }
+                  >
+                    {isGeneratingFix ? (
+                      <>
+                        <Loader2 className="size-3.5 animate-spin mr-1.5" />
+                        {fixResult ? "Regenerating..." : "Generating Fix..."}
+                      </>
+                    ) : (
+                      <>
+                        <Sparkles className="size-3.5 mr-1.5" />
+                        {fixResult ? "Regenerate Fix" : "Generate Fix"}
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
