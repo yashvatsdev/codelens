@@ -33,6 +33,30 @@ export interface IngestionResponse {
   errors: string[];
 }
 
+export type ScanStatusType =
+  | "idle"
+  | "queued"
+  | "running"
+  | "completed"
+  | "failed";
+export type ScanStageType =
+  | "idle"
+  | "preparing"
+  | "fetching_files"
+  | "static_analysis"
+  | "completed"
+  | "failed";
+
+export interface ScanStatusResponse {
+  repository_id: number;
+  status: ScanStatusType;
+  stage: ScanStageType;
+  progress: number;
+  files_processed: number;
+  files_total: number;
+  message: string;
+}
+
 export interface SourceFileResponse {
   id: number;
   repository_id: number;
@@ -170,5 +194,3 @@ export interface CreatePRFromBranchResponse {
   title: string;
   message: string;
 }
-
-

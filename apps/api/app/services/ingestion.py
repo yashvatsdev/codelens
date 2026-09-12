@@ -7,6 +7,7 @@ and optionally persisting them to the database.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from sqlalchemy import delete, select
@@ -53,6 +54,7 @@ def ingest_repository(
     max_files: int = 200,
     db: Session | None = None,
     repository_id: int | None = None,
+    progress_callback: Callable[[int, int, str], None] | None = None,
 ) -> IngestionResult:
     """Ingest source files from a public GitHub repository.
 
@@ -86,10 +88,14 @@ def ingest_repository(
     # Limit the number of files we fetch in one ingestion run
     entries_to_fetch = supported_entries[:max_files]
     result.files_skipped = len(supported_entries) - len(entries_to_fetch)
+    total_to_fetch = len(entries_to_fetch)
+
+    if progress_callback is not None:
+        progress_callback(0, total_to_fetch, f"Found {total_to_fetch} files to fetch")
 
     fetched_contents: list[GitHubFileContent] = []
 
-    for entry in entries_to_fetch:
+    for idx, entry in enumerate(entries_to_fetch, start=1):
         try:
             file_content = fetch_file_content(owner, repo, entry.path)
             fetched_contents.append(file_content)
@@ -103,6 +109,9 @@ def ingest_repository(
             result.files_fetched += 1
         except GitHubServiceError as exc:
             result.errors.append(f"{entry.path}: {exc}")
+
+        if progress_callback is not None:
+            progress_callback(idx, total_to_fetch, f"Fetched {idx}/{total_to_fetch} files")
 
     # Persist to database if session is provided
     if db is not None and repository_id is not None and fetched_contents:

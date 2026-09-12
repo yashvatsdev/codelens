@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ast
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from sqlalchemy import delete, select
@@ -192,6 +193,7 @@ def analyze_repository(
     repository_id: int,
     db: Session,
     max_function_lines: int = 50,
+    progress_callback: Callable[[int, int, str], None] | None = None,
 ) -> AnalysisResult:
     """Analyze all stored Python and JS/TS source files for a repository and persist findings to PostgreSQL."""
     source_files = db.execute(
@@ -208,8 +210,12 @@ def analyze_repository(
         delete(Finding).where(Finding.repository_id == repository_id)
     )
 
+    total_analyzable = len(analyzable_files)
+    if progress_callback is not None:
+        progress_callback(0, total_analyzable, f"Analyzing {total_analyzable} source files")
+
     all_findings: list[Finding] = []
-    for sf in analyzable_files:
+    for idx, sf in enumerate(analyzable_files, start=1):
         raw_findings = analyze_source_file(
             content=sf.content,
             file_path=sf.path,
@@ -227,6 +233,9 @@ def analyze_repository(
             )
             db.add(finding)
             all_findings.append(finding)
+
+        if progress_callback is not None:
+            progress_callback(idx, total_analyzable, f"Analyzed {idx}/{total_analyzable} files ({len(all_findings)} findings)")
 
     db.commit()
 

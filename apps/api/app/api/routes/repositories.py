@@ -1,9 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.db.database import get_db
+from app.db.database import SessionLocal, get_db
 from app.models.finding import Finding
 from app.models.repository import Repository
 from app.models.source_file import SourceFile
@@ -31,9 +31,16 @@ from app.schemas.repository import (
     IngestionResponse,
     RepositoryCreate,
     RepositoryResponse,
+    ScanStatusResponse,
     SourceFileResponse,
 )
 from app.services.analyzer import analyze_repository
+from app.services.scan_progress import (
+    get_scan_progress,
+    is_scan_active,
+    set_scan_progress,
+    update_scan_progress,
+)
 from app.services.github import (
     GitHubAPIError,
     GitHubRateLimitError,
@@ -273,6 +280,175 @@ def get_repository(
     return repository
 
 
+def run_background_scan(repository_id: int) -> None:
+    """Execute full scan (ingestion + static analysis) in the background with a fresh DB session."""
+    db = SessionLocal()
+    try:
+        repository = db.get(Repository, repository_id)
+        if not repository:
+            set_scan_progress(
+                repository_id=repository_id,
+                status="failed",
+                stage="failed",
+                progress=0,
+                message=f"Repository {repository_id} not found",
+            )
+            return
+
+        set_scan_progress(
+            repository_id=repository_id,
+            status="running",
+            stage="preparing",
+            progress=5,
+            files_processed=0,
+            files_total=0,
+            message="Preparing repository scan...",
+        )
+
+        owner = repository.owner
+        repo_name = repository.name
+        branch = repository.default_branch
+
+        # Stage 1: Fetching files from GitHub
+        set_scan_progress(
+            repository_id=repository_id,
+            status="running",
+            stage="fetching_files",
+            progress=10,
+            files_processed=0,
+            files_total=0,
+            message="Fetching file tree from GitHub...",
+        )
+
+        def ingest_cb(processed: int, total: int, msg: str) -> None:
+            pct = 10 + int((processed / max(total, 1)) * 40) if total > 0 else 10
+            set_scan_progress(
+                repository_id=repository_id,
+                status="running",
+                stage="fetching_files",
+                progress=pct,
+                files_processed=processed,
+                files_total=total,
+                message=msg,
+            )
+
+        ingest_res = ingest_repository(
+            owner=owner,
+            repo=repo_name,
+            branch=branch,
+            db=db,
+            repository_id=repository_id,
+            progress_callback=ingest_cb,
+        )
+
+        # Stage 2: Static Analysis
+        set_scan_progress(
+            repository_id=repository_id,
+            status="running",
+            stage="static_analysis",
+            progress=50,
+            files_processed=0,
+            files_total=0,
+            message="Starting static code analysis...",
+        )
+
+        def analyze_cb(processed: int, total: int, msg: str) -> None:
+            pct = 50 + int((processed / max(total, 1)) * 45) if total > 0 else 50
+            set_scan_progress(
+                repository_id=repository_id,
+                status="running",
+                stage="static_analysis",
+                progress=pct,
+                files_processed=processed,
+                files_total=total,
+                message=msg,
+            )
+
+        analysis_res = analyze_repository(
+            repository_id=repository_id,
+            db=db,
+            progress_callback=analyze_cb,
+        )
+
+        # Stage 3: Completed
+        set_scan_progress(
+            repository_id=repository_id,
+            status="completed",
+            stage="completed",
+            progress=100,
+            files_processed=analysis_res.files_analyzed,
+            files_total=analysis_res.files_analyzed,
+            message=f"Scan completed: {analysis_res.files_analyzed} files analyzed, {analysis_res.total_findings} findings found",
+        )
+
+    except Exception as exc:
+        clean_error = sanitize_ai_error(exc) if hasattr(exc, "__str__") else "Scan failed unexpectedly"
+        set_scan_progress(
+            repository_id=repository_id,
+            status="failed",
+            stage="failed",
+            progress=0,
+            files_processed=0,
+            files_total=0,
+            message=clean_error,
+        )
+    finally:
+        db.close()
+
+
+@router.get("/{repository_id}/scan-status", response_model=ScanStatusResponse)
+def get_repository_scan_status(
+    repository_id: int,
+    db: Session = Depends(get_db),
+):
+    """Retrieve current scan progress for a repository."""
+    repository = db.get(Repository, repository_id)
+    if not repository:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Repository with id {repository_id} not found",
+        )
+    return get_scan_progress(repository_id)
+
+
+@router.post("/{repository_id}/scan", response_model=ScanStatusResponse, status_code=status.HTTP_202_ACCEPTED)
+def start_repository_scan(
+    repository_id: int,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """Start a full repository scan (ingestion + static analysis) in the background.
+
+    Immediately returns initial scan progress (queued/running).
+    If a scan is already active for this repository, returns the existing active scan status
+    without starting a duplicate task.
+    """
+    repository = db.get(Repository, repository_id)
+    if not repository:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Repository with id {repository_id} not found",
+        )
+
+    if is_scan_active(repository_id):
+        # Scan is already running: return existing status without starting duplicate
+        return get_scan_progress(repository_id)
+
+    # Initialize queued state
+    initial_state = set_scan_progress(
+        repository_id=repository_id,
+        status="queued",
+        stage="preparing",
+        progress=0,
+        files_processed=0,
+        files_total=0,
+        message="Scan queued...",
+    )
+
+    background_tasks.add_task(run_background_scan, repository_id)
+    return initial_state
+
+
 @router.post("/{repository_id}/ingest", response_model=IngestionResponse)
 def ingest_repository_endpoint(
     repository_id: int,
@@ -290,6 +466,28 @@ def ingest_repository_endpoint(
             detail=f"Repository with id {repository_id} not found",
         )
 
+    set_scan_progress(
+        repository_id=repository_id,
+        status="running",
+        stage="fetching_files",
+        progress=10,
+        files_processed=0,
+        files_total=0,
+        message="Fetching files from GitHub...",
+    )
+
+    def cb(processed: int, total: int, msg: str) -> None:
+        pct = 10 + int((processed / max(total, 1)) * 85) if total > 0 else 10
+        set_scan_progress(
+            repository_id=repository_id,
+            status="running",
+            stage="fetching_files",
+            progress=pct,
+            files_processed=processed,
+            files_total=total,
+            message=msg,
+        )
+
     try:
         result = ingest_repository(
             owner=repository.owner,
@@ -298,21 +496,60 @@ def ingest_repository_endpoint(
             db=db,
             repository_id=repository.id,
         )
+        set_scan_progress(
+            repository_id=repository_id,
+            status="completed",
+            stage="completed",
+            progress=100,
+            files_processed=result.files_fetched,
+            files_total=result.files_fetched,
+            message=f"Ingested {result.files_stored} files",
+        )
     except GitHubRepoNotFoundError as e:
+        set_scan_progress(
+            repository_id=repository_id,
+            status="failed",
+            stage="failed",
+            progress=0,
+            message=str(e),
+        )
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
         )
     except GitHubRateLimitError as e:
+        set_scan_progress(
+            repository_id=repository_id,
+            status="failed",
+            stage="failed",
+            progress=0,
+            message=str(e),
+        )
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail=str(e),
         )
     except GitHubServiceError as e:
+        set_scan_progress(
+            repository_id=repository_id,
+            status="failed",
+            stage="failed",
+            progress=0,
+            message=str(e),
+        )
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=str(e),
         )
+    except Exception as e:
+        set_scan_progress(
+            repository_id=repository_id,
+            status="failed",
+            stage="failed",
+            progress=0,
+            message=sanitize_ai_error(e),
+        )
+        raise
 
     return result
 
@@ -351,8 +588,53 @@ def analyze_repository_endpoint(
             detail=f"Repository with id {repository_id} not found",
         )
 
-    result = analyze_repository(repository_id=repository.id, db=db)
-    return result
+    set_scan_progress(
+        repository_id=repository_id,
+        status="running",
+        stage="static_analysis",
+        progress=10,
+        files_processed=0,
+        files_total=0,
+        message="Starting static code analysis...",
+    )
+
+    def cb(processed: int, total: int, msg: str) -> None:
+        pct = 10 + int((processed / max(total, 1)) * 85) if total > 0 else 10
+        set_scan_progress(
+            repository_id=repository_id,
+            status="running",
+            stage="static_analysis",
+            progress=pct,
+            files_processed=processed,
+            files_total=total,
+            message=msg,
+        )
+
+    try:
+        result = analyze_repository(
+            repository_id=repository.id,
+            db=db,
+            progress_callback=cb,
+        )
+        set_scan_progress(
+            repository_id=repository_id,
+            status="completed",
+            stage="completed",
+            progress=100,
+            files_processed=result.files_analyzed,
+            files_total=result.files_analyzed,
+            message=f"Analysis complete: {result.total_findings} findings detected",
+        )
+        return result
+    except Exception as e:
+        set_scan_progress(
+            repository_id=repository_id,
+            status="failed",
+            stage="failed",
+            progress=0,
+            message=sanitize_ai_error(e),
+        )
+        raise
 
 
 @router.get("/{repository_id}/findings", response_model=list[FindingResponse])

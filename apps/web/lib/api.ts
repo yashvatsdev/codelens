@@ -13,6 +13,7 @@ import type {
   PRFindingFixRequest,
   PRFindingFixResponse,
   RepositoryResponse,
+  ScanStatusResponse,
   SourceFileResponse,
 } from "@/types/api";
 
@@ -277,4 +278,10 @@ export const api = {
         }),
       },
     ),
+  getScanStatus: (repositoryId: number) =>
+    request<ScanStatusResponse>(`/repositories/${repositoryId}/scan-status`),
+  scanRepository: (repositoryId: number) =>
+    request<ScanStatusResponse>(`/repositories/${repositoryId}/scan`, {
+      method: "POST",
+    }),
 };

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Activity,
   AlertCircle,
@@ -56,6 +56,7 @@ import type {
   HealthResponse,
   IngestionResponse,
   RepositoryResponse,
+  ScanStatusResponse,
   SeverityType,
   SourceFileResponse,
 } from "@/types/api";
@@ -175,6 +176,14 @@ export function CodeLensDashboard() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [viewingFilesRepoId, setViewingFilesRepoId] = useState<number | null>(
     null,
+  );
+
+  // Scan progress state (per repository_id)
+  const [activeScans, setActiveScans] = useState<
+    Record<number, ScanStatusResponse>
+  >({});
+  const scanIntervalsRef = useRef<Record<number, ReturnType<typeof setInterval>>>(
+    {},
   );
 
   // AI Fix state for selected finding
@@ -338,6 +347,79 @@ export function CodeLensDashboard() {
       setDeletingRepoId(null);
     }
   };
+
+  // Scan repository action (background task with progress polling)
+  const handleScan = async (repoId: number, repoName: string) => {
+    // Prevent duplicate polls for the same repo
+    if (scanIntervalsRef.current[repoId] !== undefined) return;
+
+    const stopPolling = (id: number) => {
+      if (scanIntervalsRef.current[id] !== undefined) {
+        clearInterval(scanIntervalsRef.current[id]);
+        delete scanIntervalsRef.current[id];
+      }
+    };
+
+    try {
+      const initial = await api.scanRepository(repoId);
+      setActiveScans((prev) => ({ ...prev, [repoId]: initial }));
+
+      // If already completed/failed from a previous run, just show it briefly
+      if (initial.status === "completed" || initial.status === "failed") {
+        setTimeout(() => {
+          setActiveScans((prev) => {
+            const next = { ...prev };
+            delete next[repoId];
+            return next;
+          });
+        }, 4000);
+        if (initial.status === "completed") await loadData();
+        return;
+      }
+
+      // Start polling
+      scanIntervalsRef.current[repoId] = setInterval(async () => {
+        try {
+          const status = await api.getScanStatus(repoId);
+          setActiveScans((prev) => ({ ...prev, [repoId]: status }));
+
+          if (status.status === "completed" || status.status === "failed") {
+            stopPolling(repoId);
+            if (status.status === "completed") {
+              setNotice(
+                `Scan complete for ${repoName}: ${status.message || "All stages finished."}`,
+              );
+              await loadData();
+            }
+            // Auto-dismiss progress card after 5s
+            setTimeout(() => {
+              setActiveScans((prev) => {
+                const next = { ...prev };
+                delete next[repoId];
+                return next;
+              });
+            }, 5000);
+          }
+        } catch {
+          // transient fetch error — keep polling
+        }
+      }, 1200);
+    } catch (err) {
+      setNotice(
+        `Failed to start scan for ${repoName}: ${
+          err instanceof ApiError ? err.message : "Unknown error"
+        }`,
+      );
+    }
+  };
+
+  // Cleanup all polling intervals on unmount
+  useEffect(() => {
+    const intervals = scanIntervalsRef.current;
+    return () => {
+      Object.values(intervals).forEach(clearInterval);
+    };
+  }, []);
 
   // AI Fix action for selected finding
   const handleGenerateFix = async () => {
@@ -693,6 +775,7 @@ export function CodeLensDashboard() {
                   onAdd={() => setShowAdd(true)}
                   onIngest={handleIngest}
                   onAnalyze={handleAnalyze}
+                  onScan={handleScan}
                   onViewFiles={(id) => setViewingFilesRepoId(id)}
                   onDelete={(repo) => {
                     setRepoToDelete(repo);
@@ -701,6 +784,7 @@ export function CodeLensDashboard() {
                   ingestingRepoId={ingestingRepoId}
                   analyzingRepoId={analyzingRepoId}
                   deletingRepoId={deletingRepoId}
+                  activeScans={activeScans}
                 />
               )}
               {active === "Findings" && (
@@ -750,6 +834,82 @@ export function CodeLensDashboard() {
               >
                 <X className="size-3.5" />
               </button>
+            </div>
+          )}
+
+          {/* Scan Progress Overlay — one card per active scan */}
+          {Object.entries(activeScans).length > 0 && (
+            <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 w-full max-w-sm px-4 pointer-events-none">
+              {Object.entries(activeScans).map(([repoIdStr, scan]) => {
+                const repoId = Number(repoIdStr);
+                const repo = repositories.find((r) => r.id === repoId);
+                const repoName = repo?.full_name ?? `Repository #${repoId}`;
+                const stageLabels: Record<string, string> = {
+                  idle: "Idle",
+                  preparing: "Preparing",
+                  fetching_files: "Fetching Files",
+                  static_analysis: "Static Analysis",
+                  completed: "Completed",
+                  failed: "Failed",
+                };
+                const isTerminal =
+                  scan.status === "completed" || scan.status === "failed";
+                return (
+                  <div
+                    key={repoId}
+                    className="pointer-events-auto rounded-xl border border-white/[0.1] bg-[#111416] p-4 shadow-2xl"
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-medium text-zinc-200 truncate max-w-[200px]">
+                        {repoName}
+                      </span>
+                      {isTerminal ? (
+                        <span
+                          className={`text-[10px] font-semibold px-1.5 py-0.5 rounded ${
+                            scan.status === "completed"
+                              ? "bg-emerald-400/15 text-emerald-300"
+                              : "bg-red-400/15 text-red-300"
+                          }`}
+                        >
+                          {scan.status === "completed" ? "Done" : "Failed"}
+                        </span>
+                      ) : (
+                        <span className="text-[10px] text-zinc-500 flex items-center gap-1">
+                          <Loader2 className="size-3 animate-spin" />
+                          {stageLabels[scan.stage] ?? scan.stage}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Progress bar */}
+                    <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden mb-2">
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ${
+                          scan.status === "failed"
+                            ? "bg-red-400"
+                            : scan.status === "completed"
+                              ? "bg-emerald-400"
+                              : "bg-cyan-300"
+                        }`}
+                        style={{ width: `${Math.min(scan.progress, 100)}%` }}
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between text-[10px] text-zinc-500">
+                      {scan.files_total > 0 ? (
+                        <span>
+                          {scan.files_processed} / {scan.files_total} files
+                        </span>
+                      ) : (
+                        <span>{stageLabels[scan.stage] ?? scan.stage}</span>
+                      )}
+                      <span className="text-right truncate max-w-[160px]">
+                        {scan.message}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </main>
@@ -2301,21 +2461,25 @@ function RepositoriesContent({
   onAdd,
   onIngest,
   onAnalyze,
+  onScan,
   onViewFiles,
   onDelete,
   ingestingRepoId,
   analyzingRepoId,
   deletingRepoId,
+  activeScans,
 }: {
   repositories: RepoDetails[];
   onAdd: () => void;
   onIngest: (id: number, name: string) => void;
   onAnalyze: (id: number, name: string) => void;
+  onScan: (id: number, name: string) => void;
   onViewFiles: (id: number) => void;
   onDelete: (repo: RepoDetails) => void;
   ingestingRepoId: number | null;
   analyzingRepoId: number | null;
   deletingRepoId: number | null;
+  activeScans: Record<number, ScanStatusResponse>;
 }) {
   return (
     <div className="flex flex-col gap-8">
@@ -2404,7 +2568,7 @@ function RepositoriesContent({
                 </div>
               </div>
 
-              <div className="mt-6 flex items-center justify-between border-t border-white/[0.07] pt-4 gap-2">
+              <div className="mt-6 flex flex-wrap items-center justify-between border-t border-white/[0.07] pt-4 gap-2">
                 <Button
                   variant="outline"
                   size="sm"
@@ -2418,6 +2582,29 @@ function RepositoriesContent({
                     </>
                   ) : (
                     "Ingest Files"
+                  )}
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => onScan(repo.id, repo.full_name)}
+                  disabled={
+                    activeScans[repo.id]?.status === "queued" ||
+                    activeScans[repo.id]?.status === "running"
+                  }
+                  title="Full scan: ingest files then run analysis"
+                >
+                  {activeScans[repo.id]?.status === "queued" ||
+                  activeScans[repo.id]?.status === "running" ? (
+                    <>
+                      <Loader2 className="size-3 animate-spin mr-1" />
+                      Scanning...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="size-3 mr-1" />
+                      Scan
+                    </>
                   )}
                 </Button>
                 <Button

@@ -89,3 +89,14 @@ class SourceFileDetailResponse(SourceFileResponse):
     """Schema for a stored source file including content."""
     content: str
 
+
+class ScanStatusResponse(BaseModel):
+    """Schema for repository scan and analysis progress."""
+    repository_id: int
+    status: str
+    stage: str
+    progress: int
+    files_processed: int = 0
+    files_total: int = 0
+    message: str = ""
+
