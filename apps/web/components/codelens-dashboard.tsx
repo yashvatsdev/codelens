@@ -39,6 +39,16 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PRReviewsContent } from "@/components/pr-reviews-content";
+import { OverviewMetrics } from "@/components/dashboard/overview-metrics";
+import { FindingsTrend } from "@/components/dashboard/findings-trend";
+import { RepositoryRisk } from "@/components/dashboard/repository-risk";
+import {
+  RecentActivity,
+  type ActivityItem,
+} from "@/components/dashboard/recent-activity";
+import { ScanModal } from "@/components/dashboard/scan-modal";
+import { FindingsSeverity } from "@/components/dashboard/findings-severity";
+import { RepositoryHealthDistribution } from "@/components/dashboard/repository-health-distribution";
 import {
   api,
   ApiError,
@@ -182,8 +192,11 @@ export function CodeLensDashboard() {
   const [activeScans, setActiveScans] = useState<
     Record<number, ScanStatusResponse>
   >({});
-  const scanIntervalsRef = useRef<Record<number, ReturnType<typeof setInterval>>>(
-    {},
+  const scanIntervalsRef = useRef<
+    Record<number, ReturnType<typeof setInterval>>
+  >({});
+  const [sessionActivities, setSessionActivities] = useState<ActivityItem[]>(
+    [],
   );
 
   // AI Fix state for selected finding
@@ -276,6 +289,16 @@ export function CodeLensDashboard() {
       setShowAdd(false);
       setRepoUrl("");
       setNotice(`Repository ${created.full_name} connected successfully!`);
+      setSessionActivities((prev) => [
+        {
+          id: `connect-${created.id}-${Date.now()}`,
+          type: "repo_connected",
+          description: "Repository connected to workspace",
+          context: created.full_name,
+          timestamp: new Date().toISOString(),
+        },
+        ...prev,
+      ]);
       await loadData();
     } catch (err) {
       setAddRepoError(
@@ -316,6 +339,16 @@ export function CodeLensDashboard() {
       setNotice(
         `Analysis complete for ${repoName}: ${result.total_findings} findings detected across ${result.files_analyzed} Python files.`,
       );
+      setSessionActivities((prev) => [
+        {
+          id: `analyze-${repoId}-${Date.now()}`,
+          type: "analysis_completed",
+          description: `Static analysis completed (${result.total_findings} findings)`,
+          context: repoName,
+          timestamp: new Date().toISOString(),
+        },
+        ...prev,
+      ]);
       await loadData();
     } catch (err) {
       setNotice(
@@ -363,6 +396,16 @@ export function CodeLensDashboard() {
     try {
       const initial = await api.scanRepository(repoId);
       setActiveScans((prev) => ({ ...prev, [repoId]: initial }));
+      setSessionActivities((prev) => [
+        {
+          id: `scan-start-${repoId}-${Date.now()}`,
+          type: "scan_started",
+          description: "Repository scan initiated",
+          context: repoName,
+          timestamp: new Date().toISOString(),
+        },
+        ...prev,
+      ]);
 
       // If already completed/failed from a previous run, just show it briefly
       if (initial.status === "completed" || initial.status === "failed") {
@@ -389,6 +432,16 @@ export function CodeLensDashboard() {
               setNotice(
                 `Scan complete for ${repoName}: ${status.message || "All stages finished."}`,
               );
+              setSessionActivities((prev) => [
+                {
+                  id: `scan-done-${repoId}-${Date.now()}`,
+                  type: "scan_completed",
+                  description: `Repository scan completed: ${status.message || "All stages finished."}`,
+                  context: repoName,
+                  timestamp: new Date().toISOString(),
+                },
+                ...prev,
+              ]);
               await loadData();
             }
             // Auto-dismiss progress card after 5s
@@ -767,6 +820,10 @@ export function CodeLensDashboard() {
                   onAnalyze={handleAnalyze}
                   ingestingRepoId={ingestingRepoId}
                   analyzingRepoId={analyzingRepoId}
+                  onNavigateRepositories={() => go("Repositories")}
+                  onScan={handleScan}
+                  activeScans={activeScans}
+                  sessionActivities={sessionActivities}
                 />
               )}
               {active === "Repositories" && (
@@ -2198,6 +2255,10 @@ function DashboardContent({
   onAnalyze,
   ingestingRepoId,
   analyzingRepoId,
+  onNavigateRepositories,
+  onScan,
+  activeScans,
+  sessionActivities = [],
 }: {
   repositories: RepoDetails[];
   findings: FindingResponse[];
@@ -2210,248 +2271,106 @@ function DashboardContent({
   onAnalyze: (id: number, name: string) => void;
   ingestingRepoId: number | null;
   analyzingRepoId: number | null;
+  onNavigateRepositories: () => void;
+  onScan: (id: number, name: string) => void;
+  activeScans: Record<number, ScanStatusResponse>;
+  sessionActivities?: ActivityItem[];
 }) {
+  const [scanModalOpen, setScanModalOpen] = useState(false);
+
+  // Dynamic greeting based on current local hour
+  const greeting = useMemo(() => {
+    const hour = new Date().getHours();
+    if (hour < 12) return "Good morning";
+    if (hour < 18) return "Good afternoon";
+    return "Good evening";
+  }, []);
+
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-6">
+      {/* ── Row 0: Header ───────────────────────────────────────────── */}
       <PageHeading
         eyebrow="Overview"
-        title="CodeLens Intelligence"
-        description="Static security and code health metrics aggregated across your repositories."
+        title={`${greeting} 👋`}
+        description="Here's the current state of your codebases."
         action={
-          <Button
-            onClick={onAdd}
-            className="bg-cyan-300 text-black hover:bg-cyan-200"
-          >
-            <Plus className="size-4 mr-1.5" />
-            Add repository
-          </Button>
+          <div className="flex items-center gap-3">
+            <Button
+              onClick={onAdd}
+              variant="outline"
+              className="border-white/10 text-white hover:bg-white/5"
+            >
+              <Plus className="size-4 mr-1.5" />
+              Add repository
+            </Button>
+            <Button
+              onClick={() => setScanModalOpen(true)}
+              className="bg-cyan-300 text-black hover:bg-cyan-200 font-medium text-xs sm:text-sm px-4 shadow-lg shadow-cyan-950/40 cursor-pointer"
+            >
+              <RefreshCw className="size-3.5 mr-1.5" />
+              Scan Repository
+            </Button>
+          </div>
         }
       />
 
-      {/* Repository Health Card */}
-      <RepositoryHealthCard
-        findings={findings}
+      {/* ── Row 1: 4 Top Metric Cards ───────────────────────────────── */}
+      <OverviewMetrics
         repositories={repositories}
-        onNavigateFindings={onFindings}
+        findings={findings}
+        errorCount={errorCount}
+        warningCount={warningCount}
+        infoCount={infoCount}
       />
 
-      {/* Stats Cards */}
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard
-          label="Repositories"
-          value={repositories.length}
-          hint={`${repositories.filter((r) => (r.findingsCount || 0) > 0).length} analyzed`}
-          icon={GitBranch}
-        />
-        <StatCard
-          label="Total Findings"
-          value={findings.length}
-          hint={`${errorCount} errors need attention`}
-          icon={ShieldCheck}
-          tone={errorCount > 0 ? "danger" : "default"}
-        />
-        <StatCard
-          label="Critical Errors"
-          value={errorCount}
-          hint="Syntax & critical security issues"
-          icon={AlertCircle}
-          tone={errorCount > 0 ? "danger" : "default"}
-        />
-        <StatCard
-          label="Warnings & Info"
-          value={warningCount + infoCount}
-          hint={`${warningCount} warnings, ${infoCount} info notes`}
-          icon={Zap}
-          tone={warningCount > 0 ? "warn" : "default"}
-        />
+      {/* ── Row 2: Findings Trend (left 3/5) + Findings by Severity (right 2/5) */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
+        <div className="lg:col-span-3 min-h-[260px]">
+          <FindingsTrend />
+        </div>
+        <div className="lg:col-span-2 min-h-[260px]">
+          <FindingsSeverity
+            findings={findings}
+            errorCount={errorCount}
+            warningCount={warningCount}
+            infoCount={infoCount}
+          />
+        </div>
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[1.4fr_1fr]">
-        {/* Recent Repositories */}
-        <section className="rounded-xl border border-white/[0.08] bg-white/[0.025] p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-sm font-medium text-zinc-100">
-                Connected Repositories
-              </h3>
-              <p className="mt-1 text-xs text-zinc-600">
-                Latest ingestion and static analysis status.
-              </p>
-            </div>
-            {repositories.length > 0 && (
-              <span className="text-xs text-zinc-500 font-mono">
-                {repositories.length} total
-              </span>
-            )}
-          </div>
-
-          <div className="mt-5 flex flex-col gap-1">
-            {repositories.length === 0 ? (
-              <div className="py-10 text-center text-sm text-zinc-500">
-                <FolderGit2 className="mx-auto size-6 text-zinc-600 mb-2" />
-                No repositories connected yet. Click &quot;Add repository&quot;
-                to begin.
-              </div>
-            ) : (
-              repositories.slice(0, 5).map((repo) => {
-                const repoFindings = findings.filter(
-                  (f) => f.repository_id === repo.id,
-                );
-                const repoHealth = calculateHealthScore(repoFindings);
-                const repoColors = getHealthColor(repoHealth.label);
-
-                return (
-                  <div
-                    key={repo.id}
-                    className="flex items-center gap-3 rounded-lg px-2 py-3 hover:bg-white/[0.035] transition"
-                  >
-                    <div className="size-2 rounded-full bg-cyan-400" />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <p className="truncate text-sm text-zinc-200">
-                          {repo.full_name}
-                        </p>
-                        <span className="rounded bg-white/[0.06] px-1.5 py-0.5 font-mono text-[10px] text-zinc-500">
-                          {repo.default_branch}
-                        </span>
-                      </div>
-                      <p className="mt-1 text-xs text-zinc-600">
-                        {repo.filesCount || 0} source files stored
-                      </p>
-                    </div>
-                    <div className="text-right flex items-center gap-2">
-                      <span
-                        className={`hidden sm:inline-flex items-center rounded px-1.5 py-0.5 font-mono text-[10px] border ${repoColors.badge}`}
-                        title={`Health: ${repoHealth.label}`}
-                      >
-                        {repoHealth.score}/100 {repoHealth.label}
-                      </span>
-                      <span className="text-xs text-zinc-400">
-                        {repo.findingsCount || 0} findings
-                      </span>
-                      <Button
-                        size="xs"
-                        variant="outline"
-                        onClick={() => onAnalyze(repo.id, repo.full_name)}
-                        disabled={analyzingRepoId === repo.id}
-                      >
-                        {analyzingRepoId === repo.id ? (
-                          <Loader2 className="size-3 animate-spin" />
-                        ) : (
-                          "Analyze"
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </section>
-
-        {/* Findings by Severity Breakdown */}
-        <section className="rounded-xl border border-white/[0.08] bg-white/[0.025] p-5">
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-sm font-medium text-zinc-100">
-                Findings by Severity
-              </h3>
-              <p className="mt-1 text-xs text-zinc-600">
-                Real AST analysis distribution.
-              </p>
-            </div>
-            <button
-              onClick={onFindings}
-              className="text-xs text-cyan-300 hover:text-cyan-200"
-            >
-              Explore
-            </button>
-          </div>
-
-          <div className="mt-7 flex items-end justify-between gap-3 px-2">
-            {[
-              { label: "Errors", count: errorCount, color: "bg-red-400" },
-              { label: "Warnings", count: warningCount, color: "bg-amber-300" },
-              { label: "Info", count: infoCount, color: "bg-cyan-300" },
-            ].map((item) => {
-              const maxCount = Math.max(errorCount, warningCount, infoCount, 1);
-              const heightPct = Math.max(
-                12,
-                Math.round((item.count / maxCount) * 100),
-              );
-              return (
-                <div
-                  key={item.label}
-                  className="flex flex-1 flex-col items-center gap-2"
-                >
-                  <div className="text-xs font-mono text-zinc-400">
-                    {item.count}
-                  </div>
-                  <div className="h-32 w-full flex items-end">
-                    <div
-                      className={`w-full rounded-t-sm ${item.color} transition-all`}
-                      style={{ height: `${heightPct}%`, opacity: 0.85 }}
-                    />
-                  </div>
-                  <span className="text-[11px] text-zinc-500">
-                    {item.label}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </section>
+      {/* ── Row 3: Repository Risk (left 3/5) + Health Distribution (right 2/5) */}
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
+        <div className="lg:col-span-3 min-h-[260px]">
+          <RepositoryRisk
+            repositories={repositories}
+            findings={findings}
+            onNavigateRepositories={onNavigateRepositories}
+          />
+        </div>
+        <div className="lg:col-span-2 min-h-[260px]">
+          <RepositoryHealthDistribution
+            repositories={repositories}
+            findings={findings}
+          />
+        </div>
       </div>
 
-      {/* Needs Attention: Latest findings */}
-      <section className="rounded-xl border border-white/[0.08] bg-white/[0.025] p-5">
-        <div className="flex items-center justify-between">
-          <div>
-            <h3 className="text-sm font-medium text-zinc-100">
-              Recent Findings
-            </h3>
-            <p className="mt-1 text-xs text-zinc-600">
-              Static analysis results detected in stored code.
-            </p>
-          </div>
-          <button
-            onClick={onFindings}
-            className="text-xs text-cyan-300 hover:text-cyan-200"
-          >
-            View all findings
-          </button>
-        </div>
+      {/* ── Row 4: Recent Activity (full width) ────────────────────── */}
+      <RecentActivity
+        repositories={repositories}
+        findings={findings}
+        sessionActivities={sessionActivities}
+      />
 
-        <div className="mt-5 grid gap-2 md:grid-cols-2">
-          {findings.length === 0 ? (
-            <div className="col-span-2 py-8 text-center text-sm text-zinc-500">
-              <ShieldCheck className="mx-auto size-6 text-emerald-400 mb-2" />
-              No findings detected. Run static analysis on a repository to see
-              results.
-            </div>
-          ) : (
-            findings.slice(0, 6).map((finding) => (
-              <div
-                key={finding.id}
-                className="flex items-center gap-3 rounded-lg border border-white/[0.06] bg-black/10 p-3"
-              >
-                <SeverityBadge severity={finding.severity} />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs text-zinc-300 font-medium">
-                    {finding.message}
-                  </p>
-                  <p className="mt-1 truncate font-mono text-[10px] text-zinc-500">
-                    {finding.file_path || "Repository"}
-                    {finding.line_number
-                      ? `:${finding.line_number}`
-                      : ""} · {finding.rule_id}
-                  </p>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </section>
+      {/* Scan Repository Modal */}
+      <ScanModal
+        isOpen={scanModalOpen}
+        onClose={() => setScanModalOpen(false)}
+        repositories={repositories}
+        activeScans={activeScans}
+        onScan={onScan}
+        onAddRepository={onAdd}
+      />
     </div>
   );
 }
@@ -2677,7 +2596,8 @@ function FindingsContent({
   const visibleFindings = useMemo(() => {
     return findings.filter((f) => {
       const matchesRepo =
-        selectedRepoFilter === "all" || f.repository_id === Number(selectedRepoFilter);
+        selectedRepoFilter === "all" ||
+        f.repository_id === Number(selectedRepoFilter);
       const matchesCategory =
         categoryFilter === "all" ||
         (f.category || "").toLowerCase() === categoryFilter.toLowerCase();
