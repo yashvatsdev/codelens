@@ -147,6 +147,58 @@ class TestFetchFileContent(unittest.TestCase):
             fetch_file_content("x", "y", "missing.py")
         err_fp.close()
 
+    @patch("app.services.github.urllib.request.urlopen")
+    def test_fetch_file_content_space_in_filename_regression(self, mock_urlopen):
+        """Regression: filenames containing spaces (e.g. 'sign In.html') must be URL-encoded."""
+        mock_urlopen.return_value = self._mock_content_response(
+            "sign In.html", "<h1>Sign In</h1>", sha="sha_signin",
+        )
+        result = fetch_file_content("khushboo-barnoliya", "NETFLIX-UI-clone", "sign In.html")
+        self.assertEqual(result.path, "sign In.html")
+        self.assertEqual(result.content, "<h1>Sign In</h1>")
+
+        # Verify the requested URL was correctly URL-encoded with %20 and no raw space
+        call_args = mock_urlopen.call_args
+        req = call_args[0][0]
+        self.assertEqual(
+            req.full_url,
+            "https://api.github.com/repos/khushboo-barnoliya/NETFLIX-UI-clone/contents/sign%20In.html",
+        )
+
+    @patch("app.services.github.urllib.request.urlopen")
+    def test_fetch_file_content_nested_path_with_space_regression(self, mock_urlopen):
+        """Regression: nested paths containing spaces must preserve '/' directory separators."""
+        mock_urlopen.return_value = self._mock_content_response(
+            "nested folder/sub dir/sign In.html", "<h1>Nested</h1>", sha="sha_nested",
+        )
+        result = fetch_file_content("owner", "repo", "nested folder/sub dir/sign In.html")
+        self.assertEqual(result.path, "nested folder/sub dir/sign In.html")
+        self.assertEqual(result.content, "<h1>Nested</h1>")
+
+        call_args = mock_urlopen.call_args
+        req = call_args[0][0]
+        self.assertEqual(
+            req.full_url,
+            "https://api.github.com/repos/owner/repo/contents/nested%20folder/sub%20dir/sign%20In.html",
+        )
+
+    @patch("app.services.github.urllib.request.urlopen")
+    def test_fetch_file_content_normal_path_regression(self, mock_urlopen):
+        """Regression: normal paths such as 'app.py' must continue working."""
+        mock_urlopen.return_value = self._mock_content_response(
+            "app.py", "print('hello')", sha="sha_app",
+        )
+        result = fetch_file_content("owner", "repo", "app.py")
+        self.assertEqual(result.path, "app.py")
+        self.assertEqual(result.content, "print('hello')")
+
+        call_args = mock_urlopen.call_args
+        req = call_args[0][0]
+        self.assertEqual(
+            req.full_url,
+            "https://api.github.com/repos/owner/repo/contents/app.py",
+        )
+
 
 # ---------------------------------------------------------------------------
 # Integration tests: ingest_repository service

@@ -180,8 +180,9 @@ class TestAIPRFixerService(unittest.TestCase):
         self.assertEqual(result.file_path, "index.js")
         self.assertEqual(result.line_number, 1)
 
-    def test_gemini_api_error_raises_aiprfixererror(self):
-        """When Gemini client raises a generic exception, wrap in AIPRFixerError."""
+    @patch("app.services.ai_provider.call_ollama", side_effect=RuntimeError("Ollama connection failed"))
+    def test_gemini_api_error_raises_aiprfixererror(self, _mock_ollama):
+        """When Gemini client raises a generic exception and fallback fails, wrap in AIPRFixerError."""
         mock_client = MagicMock()
         mock_client.models.generate_content.side_effect = RuntimeError("Connection timeout")
 
@@ -198,8 +199,9 @@ class TestAIPRFixerService(unittest.TestCase):
                     gemini_client=mock_client,
                 )
 
-    def test_gemini_quota_error_raises_ai_quota_exceeded_error(self):
-        """When Gemini client raises a quota error, raise AIQuotaExceededError."""
+    @patch("app.services.ai_provider.call_ollama", side_effect=RuntimeError("Ollama connection failed"))
+    def test_gemini_quota_error_raises_ai_quota_exceeded_error(self, _mock_ollama):
+        """When Gemini client raises a quota error and fallback fails, raise AIQuotaExceededError."""
         from app.core.ai_errors import AIQuotaExceededError
         mock_client = MagicMock()
         mock_client.models.generate_content.side_effect = RuntimeError("429 RESOURCE_EXHAUSTED: Quota exceeded")

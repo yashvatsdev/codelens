@@ -3,9 +3,11 @@ import logging
 from typing import Any
 from pydantic import BaseModel
 
+from app.core.ai_errors import AIQuotaExceededError, is_ai_quota_error, sanitize_ai_error
 from app.core.config import settings
 from app.models.finding import Finding
 from app.schemas.finding import FindingTestResponse
+from app.services.ai_provider import generate_ai_response, strip_markdown_json_fences
 from app.services.explainer import extract_code_context
 
 logger = logging.getLogger(__name__)
@@ -119,38 +121,29 @@ def generate_test(
         code_context=code_context,
     )
 
-    client = gemini_client
-    if client is None:
-        from google import genai
-        client = genai.Client(api_key=settings.gemini_api_key)
-
-    from google.genai import types
-
-    try:
-        response = client.models.generate_content(
-            model=settings.gemini_model,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=TestSchema,
-                temperature=0.2,
-            ),
-        )
-    except Exception as exc:
-        logger.error(f"Gemini API call for test generation failed: {exc}")
-        from app.core.ai_errors import AIQuotaExceededError, is_ai_quota_error, sanitize_ai_error
-        if is_ai_quota_error(exc):
-            raise AIQuotaExceededError() from exc
-        raise TestGeneratorError(sanitize_ai_error(exc)) from exc
-
-    raw_text = getattr(response, "text", "") or ""
     test_framework = "pytest" if (finding.file_path and finding.file_path.endswith(".py")) else "jest"
     test_file = f"tests/test_{finding.file_path.split('/')[-1]}" if finding.file_path else "tests/test_finding.py"
     test_code = ""
     explanation = ""
 
     try:
-        data = json.loads(raw_text)
+        raw_text, provider = generate_ai_response(
+            prompt=prompt,
+            schema=TestSchema,
+            temperature=0.2,
+            cloud_client=gemini_client,
+        )
+    except AIQuotaExceededError:
+        raise
+    except Exception as exc:
+        logger.error(f"AI test generation failed: {exc}")
+        if is_ai_quota_error(exc):
+            raise AIQuotaExceededError() from exc
+        raise TestGeneratorError(sanitize_ai_error(exc)) from exc
+
+    cleaned = strip_markdown_json_fences(raw_text)
+    try:
+        data = json.loads(cleaned)
         test_framework = str(data.get("test_framework", test_framework)).strip()
         test_file = str(data.get("test_file", test_file)).strip()
         test_code = str(data.get("test_code", ""))

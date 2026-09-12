@@ -20,7 +20,9 @@ import {
   GitBranch,
   GitPullRequest,
   Info,
+  Layers,
   LayoutDashboard,
+  List,
   Loader2,
   Menu,
   Plus,
@@ -2462,11 +2464,129 @@ function FindingsContent({
   repositories: RepoDetails[];
   onSelect: (f: FindingResponse) => void;
 }) {
+  const [selectedRepoFilter, setSelectedRepoFilter] = useState<string>("all");
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
+  const [viewMode, setViewMode] = useState<"grouped" | "flat">("grouped");
+  const [collapsedRepos, setCollapsedRepos] = useState<Record<number, boolean>>(
+    {},
+  );
+
   const repoMap = useMemo(() => {
     const map = new Map<number, string>();
     repositories.forEach((r) => map.set(r.id, r.name));
     return map;
   }, [repositories]);
+
+  // Extract distinct categories from findings for the filter dropdown
+  const availableCategories = useMemo(() => {
+    const cats = new Set<string>();
+    findings.forEach((f) => {
+      if (f.category) cats.add(f.category.toLowerCase());
+    });
+    return Array.from(cats).sort();
+  }, [findings]);
+
+  // Filter findings by selected repository and category filters before grouping
+  const visibleFindings = useMemo(() => {
+    return findings.filter((f) => {
+      const matchesRepo =
+        selectedRepoFilter === "all" || f.repository_id === Number(selectedRepoFilter);
+      const matchesCategory =
+        categoryFilter === "all" ||
+        (f.category || "").toLowerCase() === categoryFilter.toLowerCase();
+      return matchesRepo && matchesCategory;
+    });
+  }, [findings, selectedRepoFilter, categoryFilter]);
+
+  // Group findings by repository with counts and health scores (only include repos with matching findings)
+  const repoGroups = useMemo(() => {
+    const targetRepos =
+      selectedRepoFilter === "all"
+        ? repositories
+        : repositories.filter((r) => r.id === Number(selectedRepoFilter));
+
+    const groups = targetRepos
+      .map((repo) => {
+        const repoFindings = visibleFindings.filter(
+          (f) => f.repository_id === repo.id,
+        );
+        const health = calculateHealthScore(repoFindings);
+        const errorCount = repoFindings.filter(
+          (f) => (f.severity || "").toLowerCase() === "error",
+        ).length;
+        const warningCount = repoFindings.filter(
+          (f) => (f.severity || "").toLowerCase() === "warning",
+        ).length;
+        const infoCount = repoFindings.filter((f) => {
+          const s = (f.severity || "").toLowerCase();
+          return s !== "error" && s !== "warning";
+        }).length;
+
+        return {
+          repo,
+          findings: repoFindings,
+          health,
+          errorCount,
+          warningCount,
+          infoCount,
+        };
+      })
+      .filter((g) => g.findings.length > 0);
+
+    // Check for any findings belonging to unknown repo IDs
+    const knownIds = new Set(repositories.map((r) => r.id));
+    const orphanFindings = visibleFindings.filter(
+      (f) => !knownIds.has(f.repository_id),
+    );
+    if (orphanFindings.length > 0 && selectedRepoFilter === "all") {
+      const orphanHealth = calculateHealthScore(orphanFindings);
+      groups.push({
+        repo: {
+          id: -1,
+          github_id: "other",
+          name: "Other Findings",
+          full_name: "Other Repositories",
+          owner: "",
+          url: "",
+          default_branch: "unknown",
+          created_at: "",
+        },
+        findings: orphanFindings,
+        health: orphanHealth,
+        errorCount: orphanFindings.filter(
+          (f) => (f.severity || "").toLowerCase() === "error",
+        ).length,
+        warningCount: orphanFindings.filter(
+          (f) => (f.severity || "").toLowerCase() === "warning",
+        ).length,
+        infoCount: orphanFindings.filter((f) => {
+          const s = (f.severity || "").toLowerCase();
+          return s !== "error" && s !== "warning";
+        }).length,
+      });
+    }
+
+    return groups;
+  }, [repositories, visibleFindings, selectedRepoFilter]);
+
+  const toggleRepoCollapse = (repoId: number) => {
+    setCollapsedRepos((prev) => ({
+      ...prev,
+      [repoId]: !prev[repoId],
+    }));
+  };
+
+  const expandAll = () => {
+    setCollapsedRepos({});
+  };
+
+  const collapseAll = () => {
+    const allCollapsed: Record<number, boolean> = {};
+    repositories.forEach((r) => {
+      allCollapsed[r.id] = true;
+    });
+    setCollapsedRepos(allCollapsed);
+  };
 
   return (
     <div className="flex flex-col gap-8">
@@ -2476,89 +2596,354 @@ function FindingsContent({
         description="Inspect code quality and syntax issues detected across stored repositories."
       />
 
-      {/* Filters Bar */}
-      <div className="flex flex-col gap-3 sm:flex-row">
-        <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-600" />
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search findings by message, rule, or file path..."
-            className="h-10 w-full rounded-lg border border-white/[0.09] bg-white/[0.025] pl-9 pr-3 text-sm outline-none placeholder:text-zinc-700 focus:border-cyan-300/50"
-          />
-        </div>
+      {/* Filters & Control Bar */}
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+          {/* Search input */}
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-zinc-600" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search findings by message, rule, or file path..."
+              className="h-10 w-full rounded-lg border border-white/[0.09] bg-white/[0.025] pl-9 pr-3 text-sm outline-none placeholder:text-zinc-700 focus:border-cyan-300/50"
+            />
+          </div>
 
-        {/* Severity filter selector */}
-        <div className="flex items-center gap-1 rounded-lg border border-white/[0.09] bg-white/[0.025] p-1 text-xs">
-          {["all", "error", "warning", "info"].map((sev) => (
-            <button
-              key={sev}
-              onClick={() => setSeverityFilter(sev)}
-              className={`rounded-md px-2.5 py-1 transition capitalize ${
-                severityFilter === sev
-                  ? "bg-white/[0.1] text-white font-medium"
-                  : "text-zinc-500 hover:text-zinc-300"
-              }`}
-            >
-              {sev}
-            </button>
-          ))}
-        </div>
-      </div>
+          <div className="flex flex-wrap items-center gap-2.5">
+            {/* Repository dropdown filter */}
+            <div className="flex items-center gap-1.5 rounded-lg border border-white/[0.09] bg-white/[0.025] px-3 py-2 text-xs">
+              <FolderGit2 className="size-3.5 text-zinc-400 shrink-0" />
+              <select
+                value={selectedRepoFilter}
+                onChange={(e) => setSelectedRepoFilter(e.target.value)}
+                className="bg-transparent text-xs text-zinc-200 outline-none cursor-pointer pr-1"
+                aria-label="Filter by repository"
+              >
+                <option value="all" className="bg-[#111315] text-zinc-200">
+                  All Repositories ({findings.length})
+                </option>
+                {repositories.map((repo) => {
+                  const count = findings.filter(
+                    (f) => f.repository_id === repo.id,
+                  ).length;
+                  return (
+                    <option
+                      key={repo.id}
+                      value={repo.id.toString()}
+                      className="bg-[#111315] text-zinc-200"
+                    >
+                      {repo.name} ({count})
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
 
-      {/* Findings Table */}
-      <div className="overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.02]">
-        <div className="hidden grid-cols-[1fr_160px_120px_100px_120px] gap-4 border-b border-white/[0.07] px-5 py-3 text-[10px] uppercase tracking-wider text-zinc-600 md:grid">
-          <span>Finding Message</span>
-          <span>Rule ID</span>
-          <span>Category</span>
-          <span>Severity</span>
-          <span>Location</span>
-        </div>
-
-        {findings.length ? (
-          findings.map((finding) => (
-            <button
-              key={finding.id}
-              onClick={() => onSelect(finding)}
-              className="grid w-full items-center gap-4 border-b border-white/[0.05] px-5 py-4 text-left transition last:border-0 hover:bg-white/[0.035] md:grid-cols-[1fr_160px_120px_100px_120px]"
-            >
-              <div className="min-w-0">
-                <p className="truncate text-sm text-zinc-200 font-medium">
-                  {finding.message}
-                </p>
-                <p className="mt-1 truncate font-mono text-[10px] text-zinc-500">
-                  {repoMap.get(finding.repository_id) ||
-                    `Repo #${finding.repository_id}`}
-                </p>
+            {/* Category dropdown filter */}
+            {availableCategories.length > 0 && (
+              <div className="flex items-center gap-1.5 rounded-lg border border-white/[0.09] bg-white/[0.025] px-3 py-2 text-xs">
+                <Filter className="size-3.5 text-zinc-400 shrink-0" />
+                <select
+                  value={categoryFilter}
+                  onChange={(e) => setCategoryFilter(e.target.value)}
+                  className="bg-transparent text-xs text-zinc-200 outline-none cursor-pointer pr-1 capitalize"
+                  aria-label="Filter by category"
+                >
+                  <option value="all" className="bg-[#111315] text-zinc-200">
+                    All Categories
+                  </option>
+                  {availableCategories.map((cat) => (
+                    <option
+                      key={cat}
+                      value={cat}
+                      className="bg-[#111315] text-zinc-200 capitalize"
+                    >
+                      {cat}
+                    </option>
+                  ))}
+                </select>
               </div>
-              <span className="font-mono text-xs text-zinc-400">
-                {finding.rule_id}
-              </span>
-              <span className="text-xs text-zinc-500 capitalize">
-                {finding.category}
-              </span>
-              <span>
-                <SeverityBadge severity={finding.severity} />
-              </span>
-              <span className="truncate font-mono text-[11px] text-zinc-500">
-                {finding.file_path
-                  ? `${finding.file_path}:${finding.line_number || 1}`
-                  : "-"}
-              </span>
-            </button>
-          ))
-        ) : (
-          <div className="p-12 text-center">
-            <Search className="mx-auto size-5 text-zinc-700" />
-            <p className="mt-3 text-sm text-zinc-400">
-              {allFindingsCount(repositories) === 0
-                ? "No findings found. Ingest and analyze a repository to generate findings."
-                : "No findings match your search filter."}
-            </p>
+            )}
+
+            {/* Severity filter selector */}
+            <div className="flex items-center gap-1 rounded-lg border border-white/[0.09] bg-white/[0.025] p-1 text-xs">
+              {["all", "error", "warning", "info"].map((sev) => (
+                <button
+                  key={sev}
+                  onClick={() => setSeverityFilter(sev)}
+                  className={`rounded-md px-2.5 py-1 transition capitalize ${
+                    severityFilter === sev
+                      ? "bg-white/[0.1] text-white font-medium"
+                      : "text-zinc-500 hover:text-zinc-300"
+                  }`}
+                >
+                  {sev}
+                </button>
+              ))}
+            </div>
+
+            {/* View Mode Switcher */}
+            <div className="flex items-center gap-1 rounded-lg border border-white/[0.09] bg-white/[0.025] p-1 text-xs">
+              <button
+                type="button"
+                onClick={() => setViewMode("grouped")}
+                className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 transition ${
+                  viewMode === "grouped"
+                    ? "bg-white/[0.1] text-white font-medium"
+                    : "text-zinc-500 hover:text-zinc-300"
+                }`}
+                title="Group findings by repository"
+              >
+                <Layers className="size-3.5" />
+                <span className="hidden sm:inline">Grouped</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("flat")}
+                className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 transition ${
+                  viewMode === "flat"
+                    ? "bg-white/[0.1] text-white font-medium"
+                    : "text-zinc-500 hover:text-zinc-300"
+                }`}
+                title="Show flat table list"
+              >
+                <List className="size-3.5" />
+                <span className="hidden sm:inline">Flat List</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* Sub-header controls for grouped view: Expand/Collapse All */}
+        {viewMode === "grouped" && repoGroups.length > 0 && (
+          <div className="flex items-center justify-between text-xs text-zinc-500 px-1">
+            <span>
+              Showing findings grouped across {repoGroups.length}{" "}
+              {repoGroups.length === 1 ? "repository" : "repositories"}
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={expandAll}
+                className="hover:text-zinc-300 transition underline underline-offset-4"
+              >
+                Expand all
+              </button>
+              <span>·</span>
+              <button
+                type="button"
+                onClick={collapseAll}
+                className="hover:text-zinc-300 transition underline underline-offset-4"
+              >
+                Collapse all
+              </button>
+            </div>
           </div>
         )}
       </div>
+
+      {/* Main Content: Grouped View or Flat View */}
+      {viewMode === "grouped" ? (
+        <div className="flex flex-col gap-5">
+          {repoGroups.length === 0 || visibleFindings.length === 0 ? (
+            <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-12 text-center">
+              <Search className="mx-auto size-5 text-zinc-700" />
+              <p className="mt-3 text-sm text-zinc-400">
+                {allFindingsCount(repositories) === 0
+                  ? "No findings found. Ingest and analyze a repository to generate findings."
+                  : "No findings match your search filter."}
+              </p>
+            </div>
+          ) : (
+            repoGroups.map((group) => {
+              const isCollapsed = Boolean(collapsedRepos[group.repo.id]);
+              const healthColor = getHealthColor(group.health.label);
+
+              return (
+                <div
+                  key={group.repo.id}
+                  className="overflow-hidden rounded-xl border border-white/[0.08] bg-[#0c0d0e]/90 shadow-lg transition"
+                >
+                  {/* Accordion Repository Header */}
+                  <div
+                    onClick={() => toggleRepoCollapse(group.repo.id)}
+                    className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between border-b border-white/[0.07] bg-white/[0.02] hover:bg-white/[0.04] cursor-pointer transition select-none"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="text-zinc-400 hover:text-zinc-200 transition shrink-0">
+                        {isCollapsed ? (
+                          <ChevronRight className="size-4.5" />
+                        ) : (
+                          <ChevronDown className="size-4.5" />
+                        )}
+                      </div>
+                      <FolderGit2 className="size-4 text-cyan-400 shrink-0" />
+                      <div className="flex items-center gap-2 min-w-0 truncate">
+                        <span className="font-mono text-sm font-semibold text-zinc-100 truncate">
+                          {group.repo.full_name}
+                        </span>
+                        {group.repo.default_branch && (
+                          <span className="inline-flex items-center gap-1 rounded bg-cyan-300/10 border border-cyan-300/20 px-1.5 py-0.5 font-mono text-[10px] text-cyan-300 shrink-0">
+                            <GitBranch className="size-2.5" />
+                            {group.repo.default_branch}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap items-center gap-2 sm:shrink-0 text-xs">
+                      {/* Total Findings Count */}
+                      <span className="rounded-md border border-white/[0.08] bg-white/[0.04] px-2 py-0.5 text-[11px] font-mono text-zinc-300">
+                        {group.findings.length}{" "}
+                        {group.findings.length === 1 ? "finding" : "findings"}
+                      </span>
+
+                      {/* Errors */}
+                      {group.errorCount > 0 && (
+                        <span className="inline-flex items-center gap-1 rounded-md border border-red-500/20 bg-red-500/10 px-2 py-0.5 text-[11px] font-medium text-red-300">
+                          <span className="size-1.5 rounded-full bg-red-400" />
+                          {group.errorCount}{" "}
+                          {group.errorCount === 1 ? "error" : "errors"}
+                        </span>
+                      )}
+
+                      {/* Warnings */}
+                      {group.warningCount > 0 && (
+                        <span className="inline-flex items-center gap-1 rounded-md border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[11px] font-medium text-amber-300">
+                          <span className="size-1.5 rounded-full bg-amber-400" />
+                          {group.warningCount}{" "}
+                          {group.warningCount === 1 ? "warning" : "warnings"}
+                        </span>
+                      )}
+
+                      {/* Info */}
+                      {group.infoCount > 0 && (
+                        <span className="inline-flex items-center gap-1 rounded-md border border-cyan-500/20 bg-cyan-500/10 px-2 py-0.5 text-[11px] font-medium text-cyan-300">
+                          <span className="size-1.5 rounded-full bg-cyan-400" />
+                          {group.infoCount} info
+                        </span>
+                      )}
+
+                      {/* Health Score Badge */}
+                      <span
+                        className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 font-mono text-[11px] font-semibold ${healthColor.badge}`}
+                        title={`Health Score: ${group.health.score}/100 (${group.health.label})`}
+                      >
+                        Score: {group.health.score}/100
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Accordion Findings Table */}
+                  {!isCollapsed && (
+                    <div>
+                      {group.findings.length === 0 ? (
+                        <div className="p-8 text-center text-xs text-zinc-500">
+                          No findings match the current filter in this
+                          repository.
+                        </div>
+                      ) : (
+                        <div>
+                          <div className="hidden grid-cols-[1fr_160px_120px_100px_140px] gap-4 border-b border-white/[0.05] bg-black/20 px-5 py-2.5 text-[10px] uppercase tracking-wider text-zinc-500 md:grid">
+                            <span>Finding Message</span>
+                            <span>Rule ID</span>
+                            <span>Category</span>
+                            <span>Severity</span>
+                            <span>Location</span>
+                          </div>
+
+                          {group.findings.map((finding) => (
+                            <button
+                              key={finding.id}
+                              onClick={() => onSelect(finding)}
+                              className="grid w-full items-center gap-4 border-b border-white/[0.04] px-5 py-3.5 text-left transition last:border-0 hover:bg-white/[0.035] md:grid-cols-[1fr_160px_120px_100px_140px]"
+                            >
+                              <div className="min-w-0">
+                                <p className="truncate text-xs sm:text-sm text-zinc-200 font-medium">
+                                  {finding.message}
+                                </p>
+                              </div>
+                              <span className="font-mono text-xs text-zinc-400">
+                                {finding.rule_id}
+                              </span>
+                              <span className="text-xs text-zinc-500 capitalize">
+                                {finding.category}
+                              </span>
+                              <span>
+                                <SeverityBadge severity={finding.severity} />
+                              </span>
+                              <span className="truncate font-mono text-[11px] text-zinc-400">
+                                {finding.file_path
+                                  ? `${finding.file_path}:${finding.line_number || 1}`
+                                  : "-"}
+                              </span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+      ) : (
+        /* Flat List Mode */
+        <div className="overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.02]">
+          <div className="hidden grid-cols-[1fr_160px_120px_100px_120px] gap-4 border-b border-white/[0.07] px-5 py-3 text-[10px] uppercase tracking-wider text-zinc-600 md:grid">
+            <span>Finding Message</span>
+            <span>Rule ID</span>
+            <span>Category</span>
+            <span>Severity</span>
+            <span>Location</span>
+          </div>
+
+          {visibleFindings.length ? (
+            visibleFindings.map((finding) => (
+              <button
+                key={finding.id}
+                onClick={() => onSelect(finding)}
+                className="grid w-full items-center gap-4 border-b border-white/[0.05] px-5 py-4 text-left transition last:border-0 hover:bg-white/[0.035] md:grid-cols-[1fr_160px_120px_100px_120px]"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm text-zinc-200 font-medium">
+                    {finding.message}
+                  </p>
+                  <p className="mt-1 truncate font-mono text-[10px] text-zinc-500">
+                    {repoMap.get(finding.repository_id) ||
+                      `Repo #${finding.repository_id}`}
+                  </p>
+                </div>
+                <span className="font-mono text-xs text-zinc-400">
+                  {finding.rule_id}
+                </span>
+                <span className="text-xs text-zinc-500 capitalize">
+                  {finding.category}
+                </span>
+                <span>
+                  <SeverityBadge severity={finding.severity} />
+                </span>
+                <span className="truncate font-mono text-[11px] text-zinc-500">
+                  {finding.file_path
+                    ? `${finding.file_path}:${finding.line_number || 1}`
+                    : "-"}
+                </span>
+              </button>
+            ))
+          ) : (
+            <div className="p-12 text-center">
+              <Search className="mx-auto size-5 text-zinc-700" />
+              <p className="mt-3 text-sm text-zinc-400">
+                {allFindingsCount(repositories) === 0
+                  ? "No findings found. Ingest and analyze a repository to generate findings."
+                  : "No findings match your search filter."}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
