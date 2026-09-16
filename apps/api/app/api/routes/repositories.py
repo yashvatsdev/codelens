@@ -180,9 +180,10 @@ def connect_github_repository(
             detail=str(e),
         )
 
-    # Check for existing repository by github_id or full_name
+    # Check for existing repository by github_id or full_name for the current user
     existing = db.execute(
         select(Repository).where(
+            Repository.user_id == current_user.id,
             or_(
                 Repository.github_id == parsed.full_name,
                 Repository.full_name == parsed.full_name,
@@ -251,6 +252,7 @@ def create_repository(
 
     existing = db.execute(
         select(Repository).where(
+            Repository.user_id == current_user.id,
             or_(
                 Repository.github_id == github_id,
                 Repository.full_name == full_name,

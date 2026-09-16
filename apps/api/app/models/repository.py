@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Integer, String, func, ForeignKey
+from sqlalchemy import DateTime, Integer, String, func, ForeignKey, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.database import Base
@@ -15,8 +15,12 @@ if TYPE_CHECKING:
 class Repository(Base):
     __tablename__ = "repositories"
 
+    __table_args__ = (
+        UniqueConstraint("user_id", "github_id", name="uq_repository_user_github"),
+    )
+
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    github_id: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
+    github_id: Mapped[str] = mapped_column(String(255), nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
     full_name: Mapped[str] = mapped_column(String(255), nullable=False)
     owner: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -41,5 +45,3 @@ class Repository(Base):
 
     def __repr__(self) -> str:
         return f"<Repository id={self.id} full_name={self.full_name!r}>"
-
-

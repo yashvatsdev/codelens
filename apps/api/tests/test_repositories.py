@@ -294,6 +294,49 @@ class TestRepositoryDatabaseEndpoints(unittest.TestCase):
             connect_github_repository(payload, self.db, current_user=self.test_user)
         self.assertEqual(ctx.exception.status_code, 409)
 
+    @patch("app.api.routes.repositories.fetch_github_metadata")
+    def test_connect_github_repository_multiple_users_success(self, mock_metadata):
+        from app.services.github import GitHubRepoMetadata
+        meta = GitHubRepoMetadata(
+            owner="shared-org", name="shared-project",
+            full_name="shared-org/shared-project",
+            description=None, default_branch="main",
+            url="https://github.com/shared-org/shared-project",
+        )
+        mock_metadata.return_value = meta
+        payload = GitHubRepositoryCreate(url="https://github.com/shared-org/shared-project")
+        
+        # User 1 connects it
+        repo1 = connect_github_repository(payload, self.db, current_user=self.test_user)
+        self.assertIsNotNone(repo1.id)
+        
+        # User 2 connects the SAME repository
+        import uuid
+        unique_email = f"user2_{uuid.uuid4().hex[:8]}@example.com"
+        user2 = User(email=unique_email, password_hash="pw", name="User 2")
+        self.db.add(user2)
+        self.db.commit()
+        
+        repo2 = connect_github_repository(payload, self.db, current_user=user2)
+        self.assertIsNotNone(repo2.id)
+        
+        # Ensure they are separate repository records
+        self.assertNotEqual(repo1.id, repo2.id)
+        self.assertEqual(repo1.github_id, repo2.github_id)
+        self.assertEqual(repo1.user_id, self.test_user.id)
+        self.assertEqual(repo2.user_id, user2.id)
+        
+        # Check GET /repositories segregation
+        from app.api.routes.repositories import get_repositories
+        user1_repos = get_repositories(db=self.db, current_user=self.test_user)
+        user2_repos = get_repositories(db=self.db, current_user=user2)
+        
+        self.assertTrue(any(r.id == repo1.id for r in user1_repos))
+        self.assertFalse(any(r.id == repo2.id for r in user1_repos))
+        
+        self.assertTrue(any(r.id == repo2.id for r in user2_repos))
+        self.assertFalse(any(r.id == repo1.id for r in user2_repos))
+
     def test_connect_github_repository_invalid_url_raises_400(self):
         payload = GitHubRepositoryCreate(url="https://notgithub.com/test-org/proj")
         with self.assertRaises(HTTPException) as ctx:
