@@ -32,6 +32,7 @@ from app.schemas.repository import (
     SourceFileResponse,
 )
 from app.schemas.user import UserBase, UserCreate, UserLogin, UserResponse
+from app.schemas.pr_review import PRReviewHistoryItem, PRReviewDetailResponse
 
 __all__ = [
     "AIPRKeyFindingResponse",
@@ -67,4 +68,6 @@ __all__ = [
     "UserCreate",
     "UserLogin",
     "UserResponse",
+    "PRReviewHistoryItem",
+    "PRReviewDetailResponse",
 ]

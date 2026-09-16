@@ -1231,10 +1231,27 @@ def ai_review_pull_request_endpoint(
         )
 
     try:
-        return generate_ai_pr_review(
+        ai_response = generate_ai_pr_review(
             review_result=review_result,
             repo_full_name=repository.full_name,
         )
+        
+        # Save to database
+        from app.models.pr_review import PRReview
+        db_review = PRReview(
+            user_id=current_user.id,
+            repository_id=repository.id,
+            pull_request_number=pull_request_number,
+            summary=ai_response.get("summary", ""),
+            risk_level=ai_response.get("risk_level", ""),
+            overall_assessment=ai_response.get("overall_assessment", ""),
+            key_findings=ai_response.get("key_findings", []),
+            recommendations=ai_response.get("recommendations", []),
+        )
+        db.add(db_review)
+        db.commit()
+        
+        return ai_response
     except AIPRGeminiNotConfiguredError as e:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

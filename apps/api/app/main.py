@@ -37,8 +37,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from app.api.routes import auth, repositories, pr_reviews
+
 app.include_router(auth.router)
 app.include_router(repositories.router)
+app.include_router(pr_reviews.router)
 
 
 @app.get("/health")

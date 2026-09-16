@@ -18,6 +18,8 @@ import type {
   UserCreate,
   UserLogin,
   UserResponse,
+  PRReviewHistoryItem,
+  PRReviewDetailResponse,
 } from "@/types/api";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -288,6 +290,11 @@ export const api = {
     request<ScanStatusResponse>(`/repositories/${repositoryId}/scan`, {
       method: "POST",
     }),
+
+  // PR Reviews
+  getPRReviewHistory: () => request<PRReviewHistoryItem[]>("/pr-reviews"),
+  getPRReview: (reviewId: number) =>
+    request<PRReviewDetailResponse>(`/pr-reviews/${reviewId}`),
 
   // Auth
   login: (data: UserLogin) =>

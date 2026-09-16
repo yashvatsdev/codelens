@@ -646,8 +646,9 @@ class TestAIPRReviewEndpoint(unittest.TestCase):
 
     @patch("google.genai.Client")
     @patch("app.api.routes.repositories.review_pull_request")
-    def test_no_database_records_created_or_modified(self, mock_review, mock_client_cls):
-        """Verify no Finding, SourceFile, or Repository records are created or altered."""
+    def test_only_prreview_database_records_created(self, mock_review, mock_client_cls):
+        """Verify PRReview is created but no Finding or SourceFile records are created."""
+        from app.models.pr_review import PRReview
         repo = self._create_repo()
         mock_review.return_value = PRReviewResult(
             repository_id=repo.id,
@@ -681,6 +682,7 @@ class TestAIPRReviewEndpoint(unittest.TestCase):
 
         before_findings = self.db.query(Finding).filter(Finding.repository_id == repo.id).count()
         before_sources = self.db.query(SourceFile).filter(SourceFile.repository_id == repo.id).count()
+        before_reviews = self.db.query(PRReview).filter(PRReview.repository_id == repo.id).count()
 
         with patch.object(settings, "gemini_api_key", "mock-key"):
             response = self.client.post(f"/repositories/{repo.id}/pull-requests/8/ai-review")
@@ -688,10 +690,15 @@ class TestAIPRReviewEndpoint(unittest.TestCase):
 
         after_findings = self.db.query(Finding).filter(Finding.repository_id == repo.id).count()
         after_sources = self.db.query(SourceFile).filter(SourceFile.repository_id == repo.id).count()
+        after_reviews = self.db.query(PRReview).filter(PRReview.repository_id == repo.id).count()
 
         self.assertEqual(before_findings, 0)
         self.assertEqual(after_findings, 0)
         self.assertEqual(before_sources, after_sources)
+        
+        # PRReview should be created
+        self.assertEqual(before_reviews, 0)
+        self.assertEqual(after_reviews, 1)
 
 
 class TestRegressionSafety(unittest.TestCase):

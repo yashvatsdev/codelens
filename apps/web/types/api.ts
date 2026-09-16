@@ -211,3 +211,29 @@ export interface UserLogin {
   email: string;
   password: string;
 }
+
+export interface PRReviewHistoryItem {
+  id: number;
+  repository_id: number;
+  pull_request_number: number;
+  summary: string;
+  risk_level: string;
+  findings_count: number;
+  created_at: string;
+  repository_name: string | null;
+  repository_full_name: string | null;
+}
+
+export interface PRReviewDetailResponse {
+  id: number;
+  repository_id: number;
+  pull_request_number: number;
+  summary: string;
+  risk_level: string;
+  overall_assessment: string;
+  key_findings: AIPRKeyFinding[];
+  recommendations: string[];
+  created_at: string;
+  repository_name: string | null;
+  repository_full_name: string | null;
+}
