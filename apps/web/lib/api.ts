@@ -15,9 +15,12 @@ import type {
   RepositoryResponse,
   ScanStatusResponse,
   SourceFileResponse,
+  UserCreate,
+  UserLogin,
+  UserResponse,
 } from "@/types/api";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000";
+const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 export class ApiError extends Error {
   status: number;
@@ -132,6 +135,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   try {
     const response = await fetch(url, {
       ...init,
+      credentials: "include",
       headers: {
         "Content-Type": "application/json",
         ...init?.headers,
@@ -284,4 +288,21 @@ export const api = {
     request<ScanStatusResponse>(`/repositories/${repositoryId}/scan`, {
       method: "POST",
     }),
+
+  // Auth
+  login: (data: UserLogin) =>
+    request<UserResponse>("/auth/login", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  signup: (data: UserCreate) =>
+    request<UserResponse>("/auth/signup", {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  logout: () =>
+    request<void>("/auth/logout", {
+      method: "POST",
+    }),
+  getMe: () => request<UserResponse>("/auth/me"),
 };

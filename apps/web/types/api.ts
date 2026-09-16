@@ -194,3 +194,20 @@ export interface CreatePRFromBranchResponse {
   title: string;
   message: string;
 }
+
+export interface UserResponse {
+  id: number;
+  email: string;
+  name: string | null;
+}
+
+export interface UserCreate {
+  email: string;
+  password: string;
+  name?: string;
+}
+
+export interface UserLogin {
+  email: string;
+  password: string;
+}

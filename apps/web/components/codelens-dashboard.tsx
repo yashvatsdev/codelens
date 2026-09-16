@@ -24,6 +24,7 @@ import {
   LayoutDashboard,
   List,
   Loader2,
+  LogOut,
   Menu,
   Plus,
   RefreshCw,
@@ -55,6 +56,8 @@ import {
   getFriendlyErrorMessage,
   type FriendlyError,
 } from "@/lib/api";
+import { useAuth } from "@/lib/auth-context";
+import { useRouter } from "next/navigation";
 import { calculateHealthScore, getHealthColor } from "@/lib/health";
 import type {
   AnalysisSummaryResponse,
