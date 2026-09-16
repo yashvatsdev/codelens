@@ -34,6 +34,12 @@ from app.services.pr_reviewer import PRReviewResult
 from app.services.test_generator import TestGeneratorError
 
 
+from types import SimpleNamespace
+from app.api.deps import get_current_user
+
+_FAKE_USER = SimpleNamespace(id=1, email='test@codelens.test', name='Test', password_hash='x')
+
+
 class TestAIErrorsUtility(unittest.TestCase):
     """Unit tests for the ai_errors module functions."""
 
@@ -62,14 +68,24 @@ class TestAIErrorEndpoints(unittest.TestCase):
     """Integration tests for AI error responses on all AI endpoints."""
 
     def setUp(self):
+        app.dependency_overrides[get_current_user] = lambda: _FAKE_USER
         self.client = TestClient(app)
         self.db = SessionLocal()
+        # Ensure test user 1 exists for FK constraints
+        from app.models.user import User as _UserModel
+        _test_user = self.db.query(_UserModel).filter_by(id=1).first()
+        if not _test_user:
+            _test_user = _UserModel(id=1, email="test1@codelens.test", password_hash="x")
+            self.db.add(_test_user)
+            self.db.commit()
+
         self._cleanup()
         self.repo = self._create_repo("ai-error-repo")
         self.source_file = self._create_source_file(self.repo.id, "app.py", "x = 1\n")
         self.finding = self._create_finding(self.repo.id, "app.py", line_number=1)
 
     def tearDown(self):
+        app.dependency_overrides.clear()
         self._cleanup()
         self.db.close()
 
@@ -100,7 +116,7 @@ class TestAIErrorEndpoints(unittest.TestCase):
             full_name=f"ai-error-org/{name}",
             owner="ai-error-org",
             url=f"https://github.com/ai-error-org/{name}",
-            default_branch="main",
+            default_branch="main", user_id=1,
         )
         self.db.add(repo)
         self.db.commit()

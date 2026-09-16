@@ -9,6 +9,7 @@ import urllib.error
 from unittest.mock import MagicMock, patch
 
 from app.db.database import SessionLocal
+from app.main import app
 from app.models.repository import Repository
 from app.services.github import (
     GitHubAPIError,
@@ -25,6 +26,12 @@ from app.services.ingestion import IngestionResult, ingest_repository
 # ---------------------------------------------------------------------------
 # Unit tests: is_supported_file
 # ---------------------------------------------------------------------------
+from types import SimpleNamespace
+from app.api.deps import get_current_user
+
+_FAKE_USER = SimpleNamespace(id=1, email='test@codelens.test', name='Test', password_hash='x')
+
+
 class TestIsSupportedFile(unittest.TestCase):
     def test_python_file(self):
         self.assertTrue(is_supported_file("app/main.py"))
@@ -278,9 +285,17 @@ class TestIngestRepository(unittest.TestCase):
 class TestIngestEndpoint(unittest.TestCase):
     def setUp(self):
         self.db = SessionLocal()
+        from app.models.user import User as _UserModel
+        self.test_user = self.db.query(_UserModel).filter_by(id=1).first()
+        if not self.test_user:
+            self.test_user = _UserModel(id=1, email="ingest@codelens.test", password_hash="x")
+            self.db.add(self.test_user)
+            self.db.commit()
+            self.db.refresh(self.test_user)
         self._cleanup()
 
     def tearDown(self):
+        app.dependency_overrides.clear()
         self._cleanup()
         self.db.close()
 
@@ -306,7 +321,7 @@ class TestIngestEndpoint(unittest.TestCase):
             full_name="ingest-test-org/test-repo",
             owner="ingest-test-org",
             url="https://github.com/ingest-test-org/test-repo",
-            default_branch="main",
+            default_branch="main", user_id=1,
         )
         self.db.add(repo)
         self.db.commit()
@@ -334,7 +349,7 @@ class TestIngestEndpoint(unittest.TestCase):
             errors=[],
         )
 
-        result = ingest_repository_endpoint(repo.id, db=self.db)
+        result = ingest_repository_endpoint(repo.id, db=self.db, current_user=self.test_user)
 
         self.assertEqual(result.files_fetched, 3)
         self.assertEqual(result.owner, "ingest-test-org")
@@ -351,7 +366,7 @@ class TestIngestEndpoint(unittest.TestCase):
         from app.api.routes.repositories import ingest_repository_endpoint
 
         with self.assertRaises(HTTPException) as ctx:
-            ingest_repository_endpoint(999999, db=self.db)
+            ingest_repository_endpoint(999999, db=self.db, current_user=self.test_user)
         self.assertEqual(ctx.exception.status_code, 404)
 
     @patch("app.api.routes.repositories.ingest_repository")
@@ -363,7 +378,7 @@ class TestIngestEndpoint(unittest.TestCase):
         mock_ingest.side_effect = GitHubRepoNotFoundError("repo not found on GitHub")
 
         with self.assertRaises(HTTPException) as ctx:
-            ingest_repository_endpoint(repo.id, db=self.db)
+            ingest_repository_endpoint(repo.id, db=self.db, current_user=self.test_user)
         self.assertEqual(ctx.exception.status_code, 404)
 
 
@@ -373,9 +388,17 @@ class TestIngestEndpoint(unittest.TestCase):
 class TestIngestionPersistence(unittest.TestCase):
     def setUp(self):
         self.db = SessionLocal()
+        from app.models.user import User as _UserModel
+        self.test_user = self.db.query(_UserModel).filter_by(id=1).first()
+        if not self.test_user:
+            self.test_user = _UserModel(id=1, email="ingest@codelens.test", password_hash="x")
+            self.db.add(self.test_user)
+            self.db.commit()
+            self.db.refresh(self.test_user)
         self._cleanup()
 
     def tearDown(self):
+        app.dependency_overrides.clear()
         self._cleanup()
         self.db.close()
 
@@ -400,7 +423,7 @@ class TestIngestionPersistence(unittest.TestCase):
             full_name="persist-test-org/persist-repo",
             owner="persist-test-org",
             url="https://github.com/persist-test-org/persist-repo",
-            default_branch="main",
+            default_branch="main", user_id=1,
         )
         self.db.add(repo)
         self.db.commit()
@@ -498,9 +521,17 @@ class TestIngestionPersistence(unittest.TestCase):
 class TestGetRepositoryFiles(unittest.TestCase):
     def setUp(self):
         self.db = SessionLocal()
+        from app.models.user import User as _UserModel
+        self.test_user = self.db.query(_UserModel).filter_by(id=1).first()
+        if not self.test_user:
+            self.test_user = _UserModel(id=1, email="ingest@codelens.test", password_hash="x")
+            self.db.add(self.test_user)
+            self.db.commit()
+            self.db.refresh(self.test_user)
         self._cleanup()
 
     def tearDown(self):
+        app.dependency_overrides.clear()
         self._cleanup()
         self.db.close()
 
@@ -527,7 +558,7 @@ class TestGetRepositoryFiles(unittest.TestCase):
             full_name="files-test-org/files-repo",
             owner="files-test-org",
             url="https://github.com/files-test-org/files-repo",
-            default_branch="main",
+            default_branch="main", user_id=1,
         )
         self.db.add(repo)
         self.db.commit()
@@ -549,7 +580,7 @@ class TestGetRepositoryFiles(unittest.TestCase):
         from app.api.routes.repositories import get_repository_files
 
         repo = self._create_repo_with_files()
-        files = get_repository_files(repo.id, db=self.db)
+        files = get_repository_files(repo.id, db=self.db, current_user=self.test_user)
 
         self.assertEqual(len(files), 3)
         paths = [f.path for f in files]
@@ -565,13 +596,13 @@ class TestGetRepositoryFiles(unittest.TestCase):
             full_name="files-test-org/empty-repo",
             owner="files-test-org",
             url="https://github.com/files-test-org/empty-repo",
-            default_branch="main",
+            default_branch="main", user_id=1,
         )
         self.db.add(repo)
         self.db.commit()
         self.db.refresh(repo)
 
-        files = get_repository_files(repo.id, db=self.db)
+        files = get_repository_files(repo.id, db=self.db, current_user=self.test_user)
         self.assertEqual(len(files), 0)
 
     def test_get_files_repo_not_found(self):
@@ -579,7 +610,7 @@ class TestGetRepositoryFiles(unittest.TestCase):
         from app.api.routes.repositories import get_repository_files
 
         with self.assertRaises(HTTPException) as ctx:
-            get_repository_files(999999, db=self.db)
+            get_repository_files(999999, db=self.db, current_user=self.test_user)
         self.assertEqual(ctx.exception.status_code, 404)
 
 

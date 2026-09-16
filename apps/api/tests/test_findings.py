@@ -35,7 +35,7 @@ class TestFindingModel(unittest.TestCase):
             full_name="finding-test-org/finding-repo",
             owner="finding-test-org",
             url="https://github.com/finding-test-org/finding-repo",
-            default_branch="main",
+            default_branch="main", user_id=1,
         )
         self.db.add(repo)
         self.db.commit()

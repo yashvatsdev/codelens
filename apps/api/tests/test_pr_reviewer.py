@@ -14,6 +14,7 @@ from unittest.mock import MagicMock, patch
 from fastapi import HTTPException
 
 from app.db.database import SessionLocal
+from app.main import app
 from app.models.finding import Finding
 from app.models.repository import Repository
 from app.models.source_file import SourceFile
@@ -75,6 +76,12 @@ def _make_pr_file(
 # ---------------------------------------------------------------------------
 # Unit tests: _is_analyzable_extension
 # ---------------------------------------------------------------------------
+from types import SimpleNamespace
+from app.api.deps import get_current_user
+
+_FAKE_USER = SimpleNamespace(id=1, email='test@codelens.test', name='Test', password_hash='x')
+
+
 class TestIsAnalyzableExtension(unittest.TestCase):
     def test_python_file(self):
         self.assertTrue(_is_analyzable_extension("src/app.py"))
@@ -411,9 +418,17 @@ class TestPRReviewNoDatabaseWrites(unittest.TestCase):
 
     def setUp(self):
         self.db = SessionLocal()
+        from app.models.user import User as _UserModel
+        self.test_user = self.db.query(_UserModel).filter_by(id=1).first()
+        if not self.test_user:
+            self.test_user = _UserModel(id=1, email="pr_reviewer@codelens.test", password_hash="x")
+            self.db.add(self.test_user)
+            self.db.commit()
+            self.db.refresh(self.test_user)
         self._cleanup()
 
     def tearDown(self):
+        app.dependency_overrides.clear()
         self._cleanup()
         self.db.close()
 
@@ -444,7 +459,7 @@ class TestPRReviewNoDatabaseWrites(unittest.TestCase):
             full_name="pr-test-org/pr-repo",
             owner="pr-test-org",
             url="https://github.com/pr-test-org/pr-repo",
-            default_branch="main",
+            default_branch="main", user_id=1,
         )
         self.db.add(repo)
         self.db.commit()
@@ -508,9 +523,17 @@ class TestPRReviewEndpoint(unittest.TestCase):
 
     def setUp(self):
         self.db = SessionLocal()
+        from app.models.user import User as _UserModel
+        self.test_user = self.db.query(_UserModel).filter_by(id=1).first()
+        if not self.test_user:
+            self.test_user = _UserModel(id=1, email="pr_reviewer@codelens.test", password_hash="x")
+            self.db.add(self.test_user)
+            self.db.commit()
+            self.db.refresh(self.test_user)
         self._cleanup()
 
     def tearDown(self):
+        app.dependency_overrides.clear()
         self._cleanup()
         self.db.close()
 
@@ -527,7 +550,7 @@ class TestPRReviewEndpoint(unittest.TestCase):
             full_name="pr-endpoint-org/test-repo",
             owner="pr-endpoint-org",
             url="https://github.com/pr-endpoint-org/test-repo",
-            default_branch="main",
+            default_branch="main", user_id=1,
         )
         self.db.add(repo)
         self.db.commit()
@@ -538,7 +561,7 @@ class TestPRReviewEndpoint(unittest.TestCase):
         from app.api.routes.repositories import review_pull_request_endpoint
 
         with self.assertRaises(HTTPException) as ctx:
-            review_pull_request_endpoint(999999, 1, db=self.db)
+            review_pull_request_endpoint(999999, 1, db=self.db, current_user=self.test_user)
         self.assertEqual(ctx.exception.status_code, 404)
         self.assertIn("not found", ctx.exception.detail.lower())
 
@@ -550,7 +573,7 @@ class TestPRReviewEndpoint(unittest.TestCase):
         mock_review.side_effect = PRNotFoundError("PR 999 not found")
 
         with self.assertRaises(HTTPException) as ctx:
-            review_pull_request_endpoint(repo.id, 999, db=self.db)
+            review_pull_request_endpoint(repo.id, 999, db=self.db, current_user=self.test_user)
         self.assertEqual(ctx.exception.status_code, 404)
         self.assertIn("999", ctx.exception.detail)
 
@@ -562,7 +585,7 @@ class TestPRReviewEndpoint(unittest.TestCase):
         mock_review.side_effect = GitHubAPIError("upstream failure")
 
         with self.assertRaises(HTTPException) as ctx:
-            review_pull_request_endpoint(repo.id, 1, db=self.db)
+            review_pull_request_endpoint(repo.id, 1, db=self.db, current_user=self.test_user)
         self.assertEqual(ctx.exception.status_code, 502)
 
     @patch("app.api.routes.repositories.review_pull_request")
@@ -573,7 +596,7 @@ class TestPRReviewEndpoint(unittest.TestCase):
         mock_review.side_effect = GitHubRateLimitError("rate limit exceeded")
 
         with self.assertRaises(HTTPException) as ctx:
-            review_pull_request_endpoint(repo.id, 1, db=self.db)
+            review_pull_request_endpoint(repo.id, 1, db=self.db, current_user=self.test_user)
         self.assertEqual(ctx.exception.status_code, 429)
 
     @patch("app.api.routes.repositories.review_pull_request")
@@ -589,7 +612,7 @@ class TestPRReviewEndpoint(unittest.TestCase):
             findings=[],
         )
 
-        result = review_pull_request_endpoint(repo.id, 12, db=self.db)
+        result = review_pull_request_endpoint(repo.id, 12, db=self.db, current_user=self.test_user)
 
         self.assertEqual(result.repository_id, repo.id)
         self.assertEqual(result.pull_request_number, 12)

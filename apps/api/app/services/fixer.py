@@ -242,38 +242,32 @@ def generate_fix(
         code_context=code_context,
     )
 
-    client = gemini_client
-    if client is None:
-        from google import genai
-        client = genai.Client(api_key=settings.gemini_api_key)
-
-    from google.genai import types
+    from app.core.ai_errors import AIQuotaExceededError, is_ai_quota_error, sanitize_ai_error
+    from app.services.ai_provider import generate_ai_response, strip_markdown_json_fences
 
     try:
-        response = client.models.generate_content(
-            model=settings.gemini_model,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=FixSchema,
-                temperature=0.2,
-            ),
+        raw_text, provider = generate_ai_response(
+            prompt=prompt,
+            schema=FixSchema,
+            temperature=0.2,
+            cloud_client=gemini_client,
         )
+    except AIQuotaExceededError:
+        raise
     except Exception as exc:
-        logger.error(f"Gemini API call for fix generation failed: {exc}")
-        from app.core.ai_errors import AIQuotaExceededError, is_ai_quota_error, sanitize_ai_error
+        logger.error(f"AI fix generation failed: {exc}")
         if is_ai_quota_error(exc):
             raise AIQuotaExceededError() from exc
         raise FixerError(sanitize_ai_error(exc)) from exc
 
-    raw_text = getattr(response, "text", "") or ""
+    cleaned = strip_markdown_json_fences(raw_text)
     explanation = ""
     original_code = ""
     fixed_code = ""
     diff = None
 
     try:
-        data = json.loads(raw_text)
+        data = json.loads(cleaned)
         explanation = str(data.get("explanation", "")).strip()
         original_code = str(data.get("original_code", ""))
         fixed_code = str(data.get("fixed_code", ""))

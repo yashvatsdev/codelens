@@ -241,7 +241,7 @@ class TestAnalyzerRepositoryPersistence(unittest.TestCase):
             full_name="analyzer-test-org/analyzer-repo",
             owner="analyzer-test-org",
             url="https://github.com/analyzer-test-org/analyzer-repo",
-            default_branch="main",
+            default_branch="main", user_id=1,
         )
         self.db.add(repo)
         self.db.commit()
@@ -302,7 +302,7 @@ class TestAnalyzerRepositoryPersistence(unittest.TestCase):
             full_name="analyzer-test-org/mixed-repo",
             owner="analyzer-test-org",
             url="https://github.com/analyzer-test-org/mixed-repo",
-            default_branch="main",
+            default_branch="main", user_id=1,
         )
         self.db.add(repo)
         self.db.commit()
@@ -363,6 +363,13 @@ class TestAnalyzerRepositoryPersistence(unittest.TestCase):
 class TestAnalyzerEndpoints(unittest.TestCase):
     def setUp(self):
         self.db = SessionLocal()
+        from app.models.user import User as _UserModel
+        self.test_user = self.db.query(_UserModel).filter_by(id=1).first()
+        if not self.test_user:
+            self.test_user = _UserModel(id=1, email="analyzer2@codelens.test", password_hash="x")
+            self.db.add(self.test_user)
+            self.db.commit()
+            self.db.refresh(self.test_user)
         self._cleanup()
 
     def tearDown(self):
@@ -396,7 +403,7 @@ class TestAnalyzerEndpoints(unittest.TestCase):
             full_name="analyzer-endpoint-org/endpoint-repo",
             owner="analyzer-endpoint-org",
             url="https://github.com/analyzer-endpoint-org/endpoint-repo",
-            default_branch="main",
+            default_branch="main", user_id=1,
         )
         self.db.add(repo)
         self.db.commit()
@@ -417,7 +424,7 @@ class TestAnalyzerEndpoints(unittest.TestCase):
         from app.api.routes.repositories import analyze_repository_endpoint
 
         repo = self._create_repo_with_source()
-        res = analyze_repository_endpoint(repo.id, db=self.db)
+        res = analyze_repository_endpoint(repo.id, db=self.db, current_user=self.test_user)
 
         self.assertEqual(res.repository_id, repo.id)
         self.assertEqual(res.files_analyzed, 1)
@@ -429,7 +436,7 @@ class TestAnalyzerEndpoints(unittest.TestCase):
         from app.api.routes.repositories import analyze_repository_endpoint
 
         with self.assertRaises(HTTPException) as ctx:
-            analyze_repository_endpoint(999999, db=self.db)
+            analyze_repository_endpoint(999999, db=self.db, current_user=self.test_user)
         self.assertEqual(ctx.exception.status_code, 404)
 
     def test_get_findings_endpoint_success(self):
@@ -439,9 +446,9 @@ class TestAnalyzerEndpoints(unittest.TestCase):
         )
 
         repo = self._create_repo_with_source()
-        analyze_repository_endpoint(repo.id, db=self.db)
+        analyze_repository_endpoint(repo.id, db=self.db, current_user=self.test_user)
 
-        findings = get_repository_findings(repo.id, db=self.db)
+        findings = get_repository_findings(repo.id, db=self.db, current_user=self.test_user)
         self.assertEqual(len(findings), 2)
         rule_ids = [f.rule_id for f in findings]
         self.assertIn("PY-TODO-FIXME", rule_ids)
@@ -452,7 +459,7 @@ class TestAnalyzerEndpoints(unittest.TestCase):
         from app.api.routes.repositories import get_repository_findings
 
         with self.assertRaises(HTTPException) as ctx:
-            get_repository_findings(999999, db=self.db)
+            get_repository_findings(999999, db=self.db, current_user=self.test_user)
         self.assertEqual(ctx.exception.status_code, 404)
 
     def test_post_analyze_endpoint_no_source_files(self):
@@ -464,13 +471,13 @@ class TestAnalyzerEndpoints(unittest.TestCase):
             full_name="analyzer-endpoint-org/empty-repo",
             owner="analyzer-endpoint-org",
             url="https://github.com/analyzer-endpoint-org/empty-repo",
-            default_branch="main",
+            default_branch="main", user_id=1,
         )
         self.db.add(empty_repo)
         self.db.commit()
         self.db.refresh(empty_repo)
 
-        res = analyze_repository_endpoint(empty_repo.id, db=self.db)
+        res = analyze_repository_endpoint(empty_repo.id, db=self.db, current_user=self.test_user)
         self.assertEqual(res.repository_id, empty_repo.id)
         self.assertEqual(res.files_analyzed, 0)
         self.assertEqual(res.total_findings, 0)

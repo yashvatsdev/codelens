@@ -47,6 +47,12 @@ def _make_mock_gemini_client(response_text: str):
     return mock_client
 
 
+from types import SimpleNamespace
+from app.api.deps import get_current_user
+
+_FAKE_USER = SimpleNamespace(id=1, email='test@codelens.test', name='Test', password_hash='x')
+
+
 class TestAIPRReviewerService(unittest.TestCase):
     """Unit tests for the AI PR review service."""
 
@@ -446,11 +452,21 @@ class TestAIPRReviewEndpoint(unittest.TestCase):
     """Integration tests for POST /repositories/{id}/pull-requests/{pr}/ai-review."""
 
     def setUp(self):
+        app.dependency_overrides[get_current_user] = lambda: _FAKE_USER
         self.client = TestClient(app)
         self.db = SessionLocal()
+        # Ensure test user 1 exists for FK constraints
+        from app.models.user import User as _UserModel
+        _test_user = self.db.query(_UserModel).filter_by(id=1).first()
+        if not _test_user:
+            _test_user = _UserModel(id=1, email="test1@codelens.test", password_hash="x")
+            self.db.add(_test_user)
+            self.db.commit()
+
         self._cleanup()
 
     def tearDown(self):
+        app.dependency_overrides.clear()
         self._cleanup()
         self.db.close()
 
@@ -481,7 +497,7 @@ class TestAIPRReviewEndpoint(unittest.TestCase):
             full_name=f"ai-pr-test-org/{name}",
             owner="ai-pr-test-org",
             url=f"https://github.com/ai-pr-test-org/{name}",
-            default_branch="main",
+            default_branch="main", user_id=1,
         )
         self.db.add(repo)
         self.db.commit()

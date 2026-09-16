@@ -19,6 +19,7 @@ import logging
 import urllib.error
 import urllib.request
 import uuid
+from urllib.parse import quote
 from typing import Any
 
 from app.core.config import settings
@@ -225,6 +226,8 @@ def get_file_sha_on_branch(
     Returns None if the file does not exist yet.
     """
     url = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}?ref={branch}"
+    encoded_path = quote(path.lstrip("/"), safe="/")
+    url = f"https://api.github.com/repos/{owner}/{repo}/contents/{encoded_path}?ref={branch}"
     try:
         payload = _authenticated_github_request(url, method="GET", token=token)
         if isinstance(payload, dict):
@@ -250,6 +253,8 @@ def commit_file_to_branch(
     File content is Base64 encoded.
     """
     url = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}"
+    encoded_path = quote(path.lstrip("/"), safe="/")
+    url = f"https://api.github.com/repos/{owner}/{repo}/contents/{encoded_path}"
     b64_content = base64.b64encode(content.encode("utf-8")).decode("utf-8")
     data: dict[str, Any] = {
         "message": commit_message,

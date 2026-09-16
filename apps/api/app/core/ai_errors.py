@@ -36,6 +36,19 @@ class AIQuotaExceededError(Exception):
         self.code = code
 
 
+class AIUnavailableError(Exception):
+    """Raised when all AI providers (cloud and local fallback) are unavailable."""
+
+    def __init__(
+        self,
+        message: str = AI_UNAVAILABLE_MESSAGE,
+        code: str = AI_UNAVAILABLE_CODE,
+    ):
+        super().__init__(message)
+        self.message = message
+        self.code = code
+
+
 def is_ai_quota_error(exc: Exception | str) -> bool:
     """Detect if an exception or error string represents an AI quota/rate-limit failure."""
     if isinstance(exc, AIQuotaExceededError):
@@ -69,10 +82,52 @@ def is_ai_quota_error(exc: Exception | str) -> bool:
     return False
 
 
+def is_transient_cloud_error(exc: Exception | str) -> bool:
+    """Detect if a cloud AI error is transient/retryable (quota, timeout, connection, 5xx)."""
+    if is_ai_quota_error(exc):
+        return True
+
+    # Check for connection errors or timeouts
+    if isinstance(exc, (TimeoutError, ConnectionError, OSError)):
+        return True
+
+    # Check status codes for 5xx (service unavailable, gateway timeout, etc.)
+    for attr in ("code", "status_code", "http_status"):
+        val = getattr(exc, attr, None)
+        if val in (408, 429, 500, 502, 503, 504):
+            return True
+
+    msg = str(exc).lower()
+    transient_indicators = (
+        "timeout",
+        "timed out",
+        "connection refused",
+        "connection error",
+        "connection reset",
+        "failed to connect",
+        "network unreachable",
+        "service unavailable",
+        "service is currently unavailable",
+        "temporarily unavailable",
+        "bad gateway",
+        "gateway timeout",
+        "overloaded",
+        "not configured",
+        "gemini_api_key is not configured",
+        "502",
+        "503",
+        "504",
+    )
+    return any(ind in msg for ind in transient_indicators)
+
+
 # Provider-specific sensitive patterns that must not leak to the frontend
 _PROVIDER_PATTERNS = [
     re.compile(r"gemini[-\w.]*", re.IGNORECASE),
     re.compile(r"google[-\w.]*", re.IGNORECASE),
+    re.compile(r"ollama[-\w.]*", re.IGNORECASE),
+    re.compile(r"qwen[-\w.]*", re.IGNORECASE),
+    re.compile(r"11434", re.IGNORECASE),
     re.compile(r"generativelanguage\.googleapis\.com[^\s]*", re.IGNORECASE),
     re.compile(r"api[_-]?key[^\s,;]*", re.IGNORECASE),
     re.compile(r"resource_exhausted", re.IGNORECASE),
@@ -85,7 +140,7 @@ _PROVIDER_PATTERNS = [
 def sanitize_ai_error(exc: Exception | str) -> str:
     """Sanitize any AI provider error to avoid leaking provider details or internal metrics.
 
-    If the error message contains provider-specific details (Gemini, Google, quotaId, URLs),
+    If the error message contains provider-specific details (Gemini, Google, Ollama, quotaId, URLs),
     returns a friendly generic AI unavailable message. Otherwise preserves clean messages.
     """
     raw = str(exc).strip()

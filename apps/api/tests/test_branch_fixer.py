@@ -60,6 +60,12 @@ from app.services.github import (
 )
 
 
+from types import SimpleNamespace
+from app.api.deps import get_current_user
+
+_FAKE_USER = SimpleNamespace(id=1, email='test@codelens.test', name='Test', password_hash='x')
+
+
 class TestBranchFixerService(unittest.TestCase):
     """Unit tests for branch_fixer service operations."""
 
@@ -72,7 +78,7 @@ class TestBranchFixerService(unittest.TestCase):
             full_name="owner/repo",
             owner="owner",
             url="https://github.com/owner/repo",
-            default_branch="main",
+            default_branch="main", user_id=1,
         )
         finding = Finding(
             id=123,
@@ -158,7 +164,7 @@ class TestBranchFixerService(unittest.TestCase):
 
     def test_unchanged_fix_raises_unchanged_error(self):
         """If AI fix does not change the file content, UnchangedFixError is raised without GitHub calls."""
-        repo = Repository(id=1, owner="o", name="r", full_name="o/r", default_branch="main")
+        repo = Repository(id=1, owner="o", name="r", full_name="o/r", default_branch="main", user_id=1)
         finding = Finding(id=1, repository_id=1, file_path="app.py", line_number=1)
         source_file = SourceFile(id=1, repository_id=1, path="app.py", content="x = 1\n", sha="s1", size=6)
 
@@ -183,7 +189,7 @@ class TestBranchFixerService(unittest.TestCase):
 
     def test_missing_github_token_raises_credentials_unavailable(self):
         """Missing token raises GitHubCredentialsUnavailableError."""
-        repo = Repository(id=1, owner="o", name="r", full_name="o/r", default_branch="main")
+        repo = Repository(id=1, owner="o", name="r", full_name="o/r", default_branch="main", user_id=1)
         finding = Finding(id=1, repository_id=1, file_path="app.py", line_number=1)
         source_file = SourceFile(id=1, repository_id=1, path="app.py", content="x = 1\n", sha="s", size=6)
 
@@ -198,7 +204,7 @@ class TestBranchFixerService(unittest.TestCase):
 
     def test_branch_commit_failure_raises_branch_commit_failed_error(self):
         """If branch creation succeeds but committing the file fails, BranchCommitFailedError is raised."""
-        repo = Repository(id=1, owner="o", name="r", full_name="o/r", default_branch="main")
+        repo = Repository(id=1, owner="o", name="r", full_name="o/r", default_branch="main", user_id=1)
         finding = Finding(id=1, repository_id=1, file_path="app.py", line_number=1)
         source_file = SourceFile(id=1, repository_id=1, path="app.py", content="eval(x)\n", sha="s", size=8)
 
@@ -239,8 +245,17 @@ class TestApplyFixBranchEndpoint(unittest.TestCase):
     """Integration tests for POST /repositories/{id}/findings/{id}/apply-fix."""
 
     def setUp(self):
+        app.dependency_overrides[get_current_user] = lambda: _FAKE_USER
         self.client = TestClient(app)
         self.db = SessionLocal()
+        # Ensure test user 1 exists for FK constraints
+        from app.models.user import User as _UserModel
+        _test_user = self.db.query(_UserModel).filter_by(id=1).first()
+        if not _test_user:
+            _test_user = _UserModel(id=1, email="test1@codelens.test", password_hash="x")
+            self.db.add(_test_user)
+            self.db.commit()
+
         self._cleanup()
         self.repo = self._create_repo("test-branch-fix-repo")
         self.source_file = self._create_source_file(
@@ -251,6 +266,7 @@ class TestApplyFixBranchEndpoint(unittest.TestCase):
         self.finding = self._create_finding(self.repo.id, "app.py", line_number=2)
 
     def tearDown(self):
+        app.dependency_overrides.clear()
         self._cleanup()
         self.db.close()
 
@@ -281,7 +297,7 @@ class TestApplyFixBranchEndpoint(unittest.TestCase):
             full_name=f"test-branch-org/{name}",
             owner="test-branch-org",
             url=f"https://github.com/test-branch-org/{name}",
-            default_branch="main",
+            default_branch="main", user_id=1,
         )
         self.db.add(repo)
         self.db.commit()
@@ -633,8 +649,17 @@ class TestCreatePRFromBranchEndpoint(unittest.TestCase):
     """Integration tests for POST /repositories/{id}/findings/{id}/create-pr."""
 
     def setUp(self):
+        app.dependency_overrides[get_current_user] = lambda: _FAKE_USER
         self.client = TestClient(app)
         self.db = SessionLocal()
+        # Ensure test user 1 exists for FK constraints
+        from app.models.user import User as _UserModel
+        _test_user = self.db.query(_UserModel).filter_by(id=1).first()
+        if not _test_user:
+            _test_user = _UserModel(id=1, email="test1@codelens.test", password_hash="x")
+            self.db.add(_test_user)
+            self.db.commit()
+
         self._cleanup()
         self.repo = self._create_repo("test-pr-create-repo")
         self.source_file = self._create_source_file(
@@ -645,6 +670,7 @@ class TestCreatePRFromBranchEndpoint(unittest.TestCase):
         self.finding = self._create_finding(self.repo.id, "app.py", line_number=1)
 
     def tearDown(self):
+        app.dependency_overrides.clear()
         self._cleanup()
         self.db.close()
 
@@ -675,7 +701,7 @@ class TestCreatePRFromBranchEndpoint(unittest.TestCase):
             full_name=f"test-pr-create-org/{name}",
             owner="test-pr-create-org",
             url=f"https://github.com/test-pr-create-org/{name}",
-            default_branch="main",
+            default_branch="main", user_id=1,
         )
         self.db.add(repo)
         self.db.commit()

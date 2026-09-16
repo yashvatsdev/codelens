@@ -259,34 +259,25 @@ def generate_ai_pr_review(
         source_context=source_context,
     )
 
-    # Instantiate Gemini client (reusing existing config pattern)
-    client = gemini_client
-    if client is None:
-        from google import genai
-        client = genai.Client(api_key=settings.gemini_api_key)
-
-    from google.genai import types
+    from app.core.ai_errors import AIQuotaExceededError, is_ai_quota_error, sanitize_ai_error
+    from app.services.ai_provider import generate_ai_response, strip_markdown_json_fences
 
     try:
-        response = client.models.generate_content(
-            model=settings.gemini_model,
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=_AIPRReviewSchema,
-                temperature=0.2,
-            ),
+        raw_text, provider = generate_ai_response(
+            prompt=prompt,
+            schema=_AIPRReviewSchema,
+            temperature=0.2,
+            cloud_client=gemini_client,
         )
+    except AIQuotaExceededError:
+        raise
     except Exception as exc:
-        logger.error(f"Gemini API call for AI PR review failed: {exc}")
-        from app.core.ai_errors import AIQuotaExceededError, is_ai_quota_error, sanitize_ai_error
+        logger.error(f"AI PR review generation failed: {exc}")
         if is_ai_quota_error(exc):
             raise AIQuotaExceededError() from exc
         raise AIPRReviewerError(sanitize_ai_error(exc)) from exc
 
     # ---- Safe response parsing ----
-    raw_text = getattr(response, "text", "") or ""
-
     summary = "AI review completed."
     risk_level = "low"
     overall_assessment = ""
@@ -294,17 +285,7 @@ def generate_ai_pr_review(
     recommendations: list[str] = []
 
     try:
-        text_to_parse = raw_text.strip()
-
-        # Strip markdown code fences if present
-        if text_to_parse.startswith("```"):
-            lines = text_to_parse.split("\n")
-            if lines[0].startswith("```"):
-                lines = lines[1:]
-            if lines and lines[-1].strip() == "```":
-                lines = lines[:-1]
-            text_to_parse = "\n".join(lines)
-
+        text_to_parse = strip_markdown_json_fences(raw_text)
         data = json.loads(text_to_parse)
         summary = str(data.get("summary", summary)).strip()
         risk_level = str(data.get("risk_level", risk_level)).strip().lower()

@@ -23,6 +23,12 @@ from app.services.scan_progress import (
 )
 
 
+from types import SimpleNamespace
+from app.api.deps import get_current_user
+
+_FAKE_USER = SimpleNamespace(id=1, email='test@codelens.test', name='Test', password_hash='x')
+
+
 class TestScanProgressService(unittest.TestCase):
     """Unit tests for the in-memory scan progress service."""
 
@@ -136,7 +142,7 @@ class TestScanCallbacks(unittest.TestCase):
             owner="org",
             full_name="org/test-repo",
             url="https://github.com/org/test-repo",
-            default_branch="main",
+            default_branch="main", user_id=1,
         )
         db.add(repo)
         db.commit()
@@ -187,6 +193,7 @@ class TestScanEndpointsIntegration(unittest.TestCase):
                 db.close()
 
         app.dependency_overrides[get_db] = override_get_db
+        app.dependency_overrides[get_current_user] = lambda: _FAKE_USER
         self.client = TestClient(app)
 
         self.repo = Repository(
@@ -195,7 +202,7 @@ class TestScanEndpointsIntegration(unittest.TestCase):
             owner="scan-org",
             full_name="scan-org/scan-repo",
             url="https://github.com/scan-org/scan-repo",
-            default_branch="main",
+            default_branch="main", user_id=1,
         )
         self.db.add(self.repo)
         self.db.commit()

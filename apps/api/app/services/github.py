@@ -5,6 +5,7 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from urllib.parse import urlparse
+from urllib.parse import quote, urlparse
 
 
 class GitHubServiceError(Exception):
@@ -100,26 +101,44 @@ def is_supported_file(path: str, size: int = 0) -> bool:
 
 
 def _github_api_request(url: str, timeout: int = 10) -> dict | list:
-    """Make a GET request to the GitHub API and return parsed JSON."""
+    from app.core.config import settings
+    
+    headers = {
+        "User-Agent": "CodeLens-App",
+        "Accept": "application/vnd.github+json",
+    }
+    
+    if settings.github_token:
+        headers["Authorization"] = f"Bearer {settings.github_token}"
+
     req = urllib.request.Request(
         url,
-        headers={
-            "User-Agent": "CodeLens-App",
-            "Accept": "application/vnd.github+json",
-        },
+        headers=headers,
     )
     try:
         with urllib.request.urlopen(req, timeout=timeout) as response:
             return json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as err:
+        if err.code == 401:
+            if not settings.github_token:
+                raise GitHubAPIError("GitHub is not configured on the server.") from err
+            else:
+                raise GitHubAPIError("GitHub authentication failed. Check the server's GitHub credentials.") from err
         if err.code == 404:
             raise GitHubRepoNotFoundError(
-                f"GitHub resource not found: {url}"
+                "CodeLens cannot access this repository with the configured GitHub permissions."
             ) from err
         if err.code == 403:
-            raise GitHubRateLimitError(
-                "GitHub API rate limit exceeded. Please try again later."
-            ) from err
+            is_rate_limit = False
+            try:
+                body = json.loads(err.read().decode("utf-8"))
+                if "rate limit" in body.get("message", "").lower():
+                    is_rate_limit = True
+            except Exception:
+                pass
+            if is_rate_limit:
+                raise GitHubRateLimitError("GitHub API rate limit exceeded. Please try again later.") from err
+            raise GitHubAPIError("CodeLens does not have permission to access this repository.") from err
         raise GitHubAPIError(
             f"GitHub API returned error {err.code}: {err.reason}"
         ) from err
@@ -283,6 +302,8 @@ def fetch_file_content(
     Raises GitHubServiceError subclasses on failure.
     """
     api_url = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}"
+    encoded_path = quote(path.lstrip("/"), safe="/")
+    api_url = f"https://api.github.com/repos/{owner}/{repo}/contents/{encoded_path}"
     payload = _github_api_request(api_url, timeout=timeout)
 
     raw_content = payload.get("content", "")

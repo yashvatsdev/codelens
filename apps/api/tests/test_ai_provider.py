@@ -1,4 +1,4 @@
-git diff --stat"""Tests for centralized AI Provider and automatic Cloud AI -> Ollama fallback.
+"""Tests for centralized AI Provider and automatic Cloud AI -> Ollama fallback.
 
 Verifies:
 1. Cloud AI succeeds -> Ollama is NOT called.
