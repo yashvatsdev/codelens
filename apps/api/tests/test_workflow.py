@@ -16,13 +16,29 @@ from app.schemas.repository import GitHubRepositoryCreate
 from app.services.github import GitHubFileContent, GitHubTreeEntry
 
 
+from types import SimpleNamespace
+from app.api.deps import get_current_user
+from app.models.user import User as _UserModel
+
+
 class TestEndToEndRepositoryWorkflow(unittest.TestCase):
     def setUp(self):
         self.db = SessionLocal()
+        # Create a real test user so user_id FK constraints are satisfied
+        self.test_user = _UserModel(
+            email="workflow-test@codelens.test",
+            password_hash="testhash",
+        )
+        self.db.add(self.test_user)
+        self.db.commit()
+        self.db.refresh(self.test_user)
         self._cleanup()
 
     def tearDown(self):
         self._cleanup()
+        # Remove test user
+        self.db.delete(self.test_user)
+        self.db.commit()
         self.db.close()
 
     def _cleanup(self):
@@ -46,9 +62,10 @@ class TestEndToEndRepositoryWorkflow(unittest.TestCase):
         ).delete(synchronize_session=False)
         self.db.commit()
 
+    @patch("app.api.routes.repositories.fetch_github_metadata")
     @patch("app.services.ingestion.fetch_file_content")
     @patch("app.services.ingestion.fetch_repo_tree")
-    def test_full_repository_lifecycle_workflow(self, mock_tree, mock_content):
+    def test_full_repository_lifecycle_workflow(self, mock_tree, mock_content, mock_metadata):
         """End-to-end integration test:
         1. Connect GitHub Repository (creates Repository record)
         2. Ingest Repository (fetches tree & files, stores SourceFile records in PostgreSQL)
@@ -57,12 +74,20 @@ class TestEndToEndRepositoryWorkflow(unittest.TestCase):
         5. Retrieve Findings via GET /repositories/{id}/findings
         6. Re-run Analysis (verifies duplicate prevention / idempotency)
         """
+        from app.services.github import GitHubRepoMetadata
+        mock_metadata.return_value = GitHubRepoMetadata(
+            owner="e2e-workflow-org", name="sample-service",
+            full_name="e2e-workflow-org/sample-service",
+            description=None, default_branch="main",
+            url="https://github.com/e2e-workflow-org/sample-service",
+        )
+
         # Step 1: Connect Repository
         payload = GitHubRepositoryCreate(
             url="https://github.com/e2e-workflow-org/sample-service",
-            default_branch="main",
+            default_branch="main", user_id=1,
         )
-        repo = connect_github_repository(payload, self.db)
+        repo = connect_github_repository(payload, self.db, self.test_user)
         self.assertIsNotNone(repo.id)
         self.assertEqual(repo.full_name, "e2e-workflow-org/sample-service")
 
@@ -93,7 +118,7 @@ class TestEndToEndRepositoryWorkflow(unittest.TestCase):
             ),
         ]
 
-        ingest_summary = ingest_repository_endpoint(repo.id, db=self.db)
+        ingest_summary = ingest_repository_endpoint(repo.id, db=self.db, current_user=self.test_user)
         self.assertEqual(ingest_summary.files_fetched, 3)
         self.assertEqual(ingest_summary.files_stored, 3)
 
@@ -102,13 +127,13 @@ class TestEndToEndRepositoryWorkflow(unittest.TestCase):
         self.assertEqual(len(stored_files), 3)
 
         # Step 3: GET /repositories/{id}/files API
-        files_response = get_repository_files(repo.id, db=self.db)
+        files_response = get_repository_files(repo.id, db=self.db, current_user=self.test_user)
         self.assertEqual(len(files_response), 3)
         file_paths = sorted([f.path for f in files_response])
         self.assertEqual(file_paths, ["README.md", "app/main.py", "app/utils.py"])
 
         # Step 4: Run Static Analysis (POST /repositories/{id}/analyze)
-        analysis_summary = analyze_repository_endpoint(repo.id, db=self.db)
+        analysis_summary = analyze_repository_endpoint(repo.id, db=self.db, current_user=self.test_user)
         self.assertEqual(analysis_summary.repository_id, repo.id)
         self.assertEqual(analysis_summary.files_analyzed, 2)  # app/main.py and app/utils.py (.py files)
         self.assertGreater(analysis_summary.total_findings, 0)
@@ -118,7 +143,7 @@ class TestEndToEndRepositoryWorkflow(unittest.TestCase):
         self.assertEqual(len(stored_findings), analysis_summary.total_findings)
 
         # Step 5: GET /repositories/{id}/findings API
-        findings_response = get_repository_findings(repo.id, db=self.db)
+        findings_response = get_repository_findings(repo.id, db=self.db, current_user=self.test_user)
         self.assertEqual(len(findings_response), len(stored_findings))
         rule_ids = {f.rule_id for f in findings_response}
         self.assertIn("PY-UNUSED-IMPORT", rule_ids)
@@ -126,7 +151,7 @@ class TestEndToEndRepositoryWorkflow(unittest.TestCase):
         self.assertIn("PY-BARE-EXCEPT", rule_ids)
 
         # Step 6: Re-run Analysis to verify duplicate prevention
-        reanalysis_summary = analyze_repository_endpoint(repo.id, db=self.db)
+        reanalysis_summary = analyze_repository_endpoint(repo.id, db=self.db, current_user=self.test_user)
         self.assertEqual(reanalysis_summary.total_findings, len(stored_findings))
         post_reanalysis_findings_count = (
             self.db.query(Finding).filter(Finding.repository_id == repo.id).count()

@@ -160,6 +160,32 @@ const navItems = [
 ];
 
 export function CodeLensDashboard() {
+  const { user, logout } = useAuth();
+  const [accountMenuOpen, setAccountMenuOpen] = useState(false);
+  const accountMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setAccountMenuOpen(false);
+    };
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        accountMenuRef.current &&
+        !accountMenuRef.current.contains(e.target as Node)
+      ) {
+        setAccountMenuOpen(false);
+      }
+    };
+    if (accountMenuOpen) {
+      document.addEventListener("keydown", handleKeyDown);
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [accountMenuOpen]);
+
   const [active, setActive] = useState<Section>("Dashboard");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -715,18 +741,54 @@ export function CodeLensDashboard() {
             </button>
           </div>
         </div>
-        <div className="border-t border-white/[0.07] p-3">
-          <div className="flex items-center gap-3 rounded-lg bg-white/[0.035] p-3">
-            <div className="flex size-8 items-center justify-center rounded-full bg-zinc-700 text-xs font-medium">
-              CL
+        <div
+          className="relative border-t border-white/[0.07] p-3"
+          ref={accountMenuRef}
+        >
+          {accountMenuOpen && (
+            <div className="absolute bottom-full left-3 z-50 mb-2 w-[calc(100%-24px)] overflow-hidden rounded-lg border border-white/[0.07] bg-[#121417] shadow-xl">
+              <button
+                onClick={() => {
+                  setAccountMenuOpen(false);
+                  setActive("Settings");
+                }}
+                className="flex w-full items-center gap-2 px-3 py-2.5 text-sm text-zinc-300 hover:bg-white/[0.04] hover:text-white"
+              >
+                <Settings2 className="size-4" />
+                Settings
+              </button>
+              <div className="h-px bg-white/[0.07]" />
+              <button
+                onClick={() => {
+                  setAccountMenuOpen(false);
+                  logout();
+                }}
+                className="flex w-full items-center gap-2 px-3 py-2.5 text-sm text-red-400 hover:bg-red-400/10"
+              >
+                <LogOut className="size-4" />
+                Log out
+              </button>
             </div>
-            <div className="min-w-0">
-              <p className="truncate text-xs font-medium">CodeLens Developer</p>
-              <p className="truncate text-[11px] text-zinc-600">
-                Local Environment
+          )}
+          <button
+            onClick={() => setAccountMenuOpen(!accountMenuOpen)}
+            className="flex w-full items-center gap-3 rounded-lg bg-white/[0.035] p-3 text-left transition-colors hover:bg-white/[0.07]"
+          >
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-cyan-950 text-xs font-medium text-cyan-400 ring-1 ring-cyan-400/30">
+              {user?.name
+                ? user.name.substring(0, 2).toUpperCase()
+                : user?.email?.substring(0, 2).toUpperCase() || "CL"}
+            </div>
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs font-medium text-white">
+                {user?.name || "CodeLens User"}
+              </p>
+              <p className="truncate text-[11px] text-zinc-400">
+                {user?.email || "Local Environment"}
               </p>
             </div>
-          </div>
+            <ChevronDown className="size-4 shrink-0 text-zinc-500" />
+          </button>
         </div>
       </aside>
 

@@ -3,7 +3,7 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
-from app.api.routes import repositories
+from app.api.routes import auth, repositories
 from app.core.ai_errors import AIQuotaExceededError
 from app.db.database import engine
 
@@ -37,6 +37,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth.router)
 app.include_router(repositories.router)
 
 

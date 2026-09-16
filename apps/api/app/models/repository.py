@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Integer, String, func
+from sqlalchemy import DateTime, Integer, String, func, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.database import Base
@@ -9,6 +9,7 @@ from app.db.database import Base
 if TYPE_CHECKING:
     from app.models.finding import Finding
     from app.models.source_file import SourceFile
+    from app.models.user import User
 
 
 class Repository(Base):
@@ -26,7 +27,11 @@ class Repository(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+    user_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id"), nullable=True
+    )
 
+    user: Mapped["User | None"] = relationship("User", back_populates="repositories")
     findings: Mapped[list["Finding"]] = relationship(
         "Finding", back_populates="repository", cascade="all, delete-orphan"
     )

@@ -31,8 +31,14 @@ export default function SignupPage() {
       if (err instanceof ApiError) {
         if (err.status === 409) {
           setError("An account with this email already exists. Try signing in.");
+          setError(
+            "An account with this email already exists. Try signing in.",
+          );
         } else if (err.status === 422) {
           setError("Please provide a valid email and a password of at least 8 characters.");
+          setError(
+            "Please provide a valid email and a password of at least 8 characters.",
+          );
         } else {
           setError(err.message || "Sign up failed. Please try again.");
         }
@@ -69,6 +75,9 @@ export default function SignupPage() {
         {/* Card */}
         <div className="bg-gray-900 border border-gray-800 rounded-xl p-8 shadow-2xl">
           <h1 className="text-xl font-semibold text-white mb-6">Create account</h1>
+          <h1 className="text-xl font-semibold text-white mb-6">
+            Create account
+          </h1>
 
           {error && (
             <div className="mb-5 rounded-lg bg-red-950/60 border border-red-800 px-4 py-3 text-sm text-red-300">

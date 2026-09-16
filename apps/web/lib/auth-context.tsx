@@ -7,6 +7,7 @@ import React, {
   useEffect,
   useState,
 } from "react";
+import { useRouter } from "next/navigation";
 import { api } from "./api";
 import type { UserResponse } from "@/types/api";
 
@@ -18,6 +19,8 @@ interface AuthContextValue {
   refresh: () => Promise<void>;
   /** call after successful login/signup – caller passes returned user */
   setUser: (user: UserResponse | null) => void;
+  /** log out the user and clear state */
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue>({
@@ -25,11 +28,13 @@ const AuthContext = createContext<AuthContextValue>({
   loading: true,
   refresh: async () => {},
   setUser: () => {},
+  logout: async () => {},
 });
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<UserResponse | null>(null);
   const [loading, setLoading] = useState(true);
+  const router = useRouter();
 
   const refresh = useCallback(async () => {
     try {
@@ -40,13 +45,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const logout = useCallback(async () => {
+    try {
+      await api.logout();
+    } catch (err) {
+      console.error("Logout failed:", err);
+    } finally {
+      setUser(null);
+      router.replace("/login");
+    }
+  }, [router]);
+
   // Check session on mount
   useEffect(() => {
     refresh().finally(() => setLoading(false));
   }, [refresh]);
 
   return (
-    <AuthContext.Provider value={{ user, loading, refresh, setUser }}>
+    <AuthContext.Provider value={{ user, loading, refresh, setUser, logout }}>
       {children}
     </AuthContext.Provider>
   );
@@ -55,4 +71,3 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 export function useAuth() {
   return useContext(AuthContext);
 }
-

@@ -7,6 +7,9 @@ from app.db.database import SessionLocal, get_db
 from app.models.finding import Finding
 from app.models.repository import Repository
 from app.models.source_file import SourceFile
+
+from app.api.deps import get_current_user
+from app.models.user import User
 from app.schemas.finding import (
     AIPRReviewResponse,
     AnalysisSummaryResponse,
@@ -104,7 +107,7 @@ router = APIRouter(prefix="/repositories", tags=["repositories"])
 
 
 @router.post("/github/metadata", response_model=GitHubMetadataResponse)
-def get_github_repository_metadata(payload: GitHubMetadataRequest):
+def get_github_repository_metadata(payload: GitHubMetadataRequest, current_user: User = Depends(get_current_user)):
     """Fetch public GitHub repository metadata from a GitHub repository URL."""
     try:
         metadata = fetch_github_metadata(payload.url)
@@ -133,6 +136,7 @@ def get_github_repository_metadata(payload: GitHubMetadataRequest):
 
 @router.get("/github/metadata", response_model=GitHubMetadataResponse)
 def get_github_repository_metadata_query(
+    current_user: User = Depends(get_current_user),
     url: str = Query(..., description="GitHub repository URL (e.g. https://github.com/owner/repo)")
 ):
     """Fetch public GitHub repository metadata using query parameter."""
@@ -165,6 +169,7 @@ def get_github_repository_metadata_query(
 def connect_github_repository(
     payload: GitHubRepositoryCreate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Accept and validate a GitHub repository URL, store metadata, and return the repository."""
     try:
@@ -190,15 +195,26 @@ def connect_github_repository(
             detail=f"Repository '{parsed.full_name}' is already connected",
         )
 
-    default_branch = payload.default_branch or "main"
+    try:
+        metadata = fetch_github_metadata(parsed.url)
+    except GitHubRepoNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e))
+    except GitHubRateLimitError as e:
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=str(e))
+    except GitHubAPIError as e:
+        # Pass the exact sanitized message to the frontend (status 400 so it's a client error)
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+    default_branch = payload.default_branch or metadata.default_branch
 
     repository = Repository(
-        github_id=parsed.full_name,
-        name=parsed.name,
-        full_name=parsed.full_name,
-        owner=parsed.owner,
-        url=parsed.url,
+        github_id=metadata.full_name,
+        name=metadata.name,
+        full_name=metadata.full_name,
+        owner=metadata.owner,
+        url=metadata.url,
         default_branch=default_branch,
+        user_id=current_user.id,
     )
     db.add(repository)
     db.commit()
@@ -210,6 +226,7 @@ def connect_github_repository(
 def create_repository(
     repository_in: RepositoryCreate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     # If explicit details are missing, attempt to parse them from the provided URL
     if not (repository_in.name and repository_in.owner and repository_in.full_name):
@@ -253,6 +270,7 @@ def create_repository(
         owner=owner,
         url=canonical_url,
         default_branch=repository_in.default_branch or "main",
+        user_id=current_user.id,
     )
     db.add(repository)
     db.commit()
@@ -261,8 +279,8 @@ def create_repository(
 
 
 @router.get("", response_model=list[RepositoryResponse])
-def get_repositories(db: Session = Depends(get_db)):
-    repositories = db.execute(select(Repository).order_by(Repository.id)).scalars().all()
+def get_repositories(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    repositories = db.execute(select(Repository).where(Repository.user_id == current_user.id).order_by(Repository.id)).scalars().all()
     return repositories
 
 
@@ -270,9 +288,10 @@ def get_repositories(db: Session = Depends(get_db)):
 def get_repository(
     repository_id: int,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     repository = db.get(Repository, repository_id)
-    if not repository:
+    if not repository or repository.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Repository with id {repository_id} not found",
@@ -400,10 +419,11 @@ def run_background_scan(repository_id: int) -> None:
 def get_repository_scan_status(
     repository_id: int,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Retrieve current scan progress for a repository."""
     repository = db.get(Repository, repository_id)
-    if not repository:
+    if not repository or repository.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Repository with id {repository_id} not found",
@@ -416,6 +436,7 @@ def start_repository_scan(
     repository_id: int,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Start a full repository scan (ingestion + static analysis) in the background.
 
@@ -424,7 +445,7 @@ def start_repository_scan(
     without starting a duplicate task.
     """
     repository = db.get(Repository, repository_id)
-    if not repository:
+    if not repository or repository.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Repository with id {repository_id} not found",
@@ -453,6 +474,7 @@ def start_repository_scan(
 def ingest_repository_endpoint(
     repository_id: int,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Ingest source files from a stored GitHub repository.
 
@@ -460,7 +482,7 @@ def ingest_repository_endpoint(
     retrieves supported source file contents, and returns an ingestion summary.
     """
     repository = db.get(Repository, repository_id)
-    if not repository:
+    if not repository or repository.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Repository with id {repository_id} not found",
@@ -558,10 +580,11 @@ def ingest_repository_endpoint(
 def get_repository_files(
     repository_id: int,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Retrieve stored source files for a repository (metadata only, no content)."""
     repository = db.get(Repository, repository_id)
-    if not repository:
+    if not repository or repository.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Repository with id {repository_id} not found",
@@ -579,10 +602,11 @@ def get_repository_files(
 def analyze_repository_endpoint(
     repository_id: int,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Run static code analysis on stored Python files for a repository."""
     repository = db.get(Repository, repository_id)
-    if not repository:
+    if not repository or repository.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Repository with id {repository_id} not found",
@@ -641,10 +665,11 @@ def analyze_repository_endpoint(
 def get_repository_findings(
     repository_id: int,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Retrieve stored static analysis findings for a repository."""
     repository = db.get(Repository, repository_id)
-    if not repository:
+    if not repository or repository.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Repository with id {repository_id} not found",
@@ -662,9 +687,10 @@ def get_repository_findings(
 def delete_repository(
     repository_id: int,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     repository = db.get(Repository, repository_id)
-    if not repository:
+    if not repository or repository.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Repository with id {repository_id} not found",
@@ -685,10 +711,11 @@ def explain_repository_finding(
     repository_id: int,
     finding_id: int,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Generate an AI-powered explanation and remediation for a finding using Google Gemini."""
     repository = db.get(Repository, repository_id)
-    if not repository:
+    if not repository or repository.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Repository with id {repository_id} not found",
@@ -747,13 +774,14 @@ def fix_repository_finding_endpoint(
     repository_id: int,
     finding_id: int,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Generate an AI-powered code fix for a finding using Google Gemini.
 
     This endpoint does not modify source files or repositories in GitHub or the database.
     """
     repository = db.get(Repository, repository_id)
-    if not repository:
+    if not repository or repository.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Repository with id {repository_id} not found",
@@ -815,13 +843,14 @@ def generate_test_for_finding_endpoint(
     repository_id: int,
     finding_id: int,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Generate an AI-powered unit test for a finding using Google Gemini.
 
     This endpoint does not modify source files or repositories in GitHub or the database.
     """
     repository = db.get(Repository, repository_id)
-    if not repository:
+    if not repository or repository.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Repository with id {repository_id} not found",
@@ -884,6 +913,7 @@ def apply_fix_to_branch_endpoint(
     finding_id: int,
     payload: ApplyFixBranchRequest | None = None,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Apply an AI-generated fix for a finding to a newly created GitHub branch.
 
@@ -899,7 +929,7 @@ def apply_fix_to_branch_endpoint(
     10. Leaves the default branch untouched.
     """
     repository = db.get(Repository, repository_id)
-    if not repository:
+    if not repository or repository.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Repository with id {repository_id} not found",
@@ -1009,6 +1039,7 @@ def create_pr_from_branch_endpoint(
     finding_id: int,
     payload: CreatePRFromBranchRequest,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Create a GitHub Pull Request from an already-created AI fix branch.
 
@@ -1021,7 +1052,7 @@ def create_pr_from_branch_endpoint(
     7. Returns Pull Request metadata.
     """
     repository = db.get(Repository, repository_id)
-    if not repository:
+    if not repository or repository.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Repository with id {repository_id} not found",
@@ -1102,6 +1133,7 @@ def review_pull_request_endpoint(
     repository_id: int,
     pull_request_number: int,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Review a GitHub Pull Request by analyzing its changed files.
 
@@ -1111,7 +1143,7 @@ def review_pull_request_endpoint(
     Nothing is written to the database.
     """
     repository = db.get(Repository, repository_id)
-    if not repository:
+    if not repository or repository.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Repository with id {repository_id} not found",
@@ -1151,6 +1183,7 @@ def ai_review_pull_request_endpoint(
     repository_id: int,
     pull_request_number: int,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Perform an AI-powered code review of a GitHub Pull Request using Google Gemini.
 
@@ -1160,7 +1193,7 @@ def ai_review_pull_request_endpoint(
     Nothing is written to the database.
     """
     repository = db.get(Repository, repository_id)
-    if not repository:
+    if not repository or repository.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Repository with id {repository_id} not found",
@@ -1225,6 +1258,7 @@ def fix_pr_finding_endpoint(
     pull_request_number: int,
     payload: PRFindingFixRequest,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Generate an AI-powered code fix for a PR review finding using Google Gemini.
 
@@ -1235,7 +1269,7 @@ def fix_pr_finding_endpoint(
     Nothing is written to the database or GitHub.
     """
     repository = db.get(Repository, repository_id)
-    if not repository:
+    if not repository or repository.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Repository with id {repository_id} not found",
@@ -1320,6 +1354,7 @@ def comment_pull_request_endpoint(
     pull_request_number: int,
     payload: PRCommentRequest = PRCommentRequest(),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Post an AI-powered code review comment to a GitHub Pull Request.
 
@@ -1329,7 +1364,7 @@ def comment_pull_request_endpoint(
     Does not modify repository contents, commits, branches, or database records.
     """
     repository = db.get(Repository, repository_id)
-    if not repository:
+    if not repository or repository.user_id != current_user.id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Repository with id {repository_id} not found",

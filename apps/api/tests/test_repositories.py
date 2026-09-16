@@ -18,6 +18,7 @@ from app.api.routes.repositories import (
 from app.db.database import SessionLocal
 from app.models.finding import Finding
 from app.models.repository import Repository
+from app.models.user import User
 from app.models.source_file import SourceFile
 from app.schemas.repository import (
     GitHubMetadataRequest,
@@ -31,6 +32,9 @@ from app.services.github import (
     fetch_github_metadata,
     parse_github_url,
 )
+from types import SimpleNamespace
+
+_FAKE_USER = SimpleNamespace(id=1, email="test@codelens.test", name="Test", password_hash="x")
 
 
 class TestGitHubUrlParser(unittest.TestCase):
@@ -141,17 +145,16 @@ class TestGitHubMetadataFetching(unittest.TestCase):
 
     @patch("urllib.request.urlopen")
     def test_fetch_github_metadata_rate_limit(self, mock_urlopen):
-        err_fp = io.BytesIO(b"{}")
+        err_fp = io.BytesIO(b'{"message": "API rate limit exceeded for this resource."}')
         mock_urlopen.side_effect = urllib.error.HTTPError(
             url="https://api.github.com/repos/owner/repo",
             code=403,
-            msg="rate limit exceeded",
+            msg="Forbidden",
             hdrs={},
             fp=err_fp,
         )
         with self.assertRaises(GitHubRateLimitError) as ctx:
             fetch_github_metadata("https://github.com/owner/repo")
-        err_fp.close()
         self.assertIn("rate limit exceeded", str(ctx.exception).lower())
 
     @patch("urllib.request.urlopen")
@@ -182,7 +185,7 @@ class TestGitHubMetadataEndpoint(unittest.TestCase):
         })
 
         payload = GitHubMetadataRequest(url="https://github.com/yashvatsdev/codelens")
-        result = get_github_repository_metadata(payload)
+        result = get_github_repository_metadata(payload, current_user=_FAKE_USER)
 
         self.assertEqual(result.owner, "yashvatsdev")
         self.assertEqual(result.name, "codelens")
@@ -193,7 +196,7 @@ class TestGitHubMetadataEndpoint(unittest.TestCase):
     def test_post_metadata_invalid_url_returns_400(self):
         payload = GitHubMetadataRequest(url="https://not-github.org/bad/url")
         with self.assertRaises(HTTPException) as ctx:
-            get_github_repository_metadata(payload)
+            get_github_repository_metadata(payload, current_user=_FAKE_USER)
         self.assertEqual(ctx.exception.status_code, 400)
 
     @patch("urllib.request.urlopen")
@@ -208,7 +211,7 @@ class TestGitHubMetadataEndpoint(unittest.TestCase):
         )
         payload = GitHubMetadataRequest(url="https://github.com/unknown/project")
         with self.assertRaises(HTTPException) as ctx:
-            get_github_repository_metadata(payload)
+            get_github_repository_metadata(payload, current_user=_FAKE_USER)
         err_fp.close()
         self.assertEqual(ctx.exception.status_code, 404)
 
@@ -223,7 +226,7 @@ class TestGitHubMetadataEndpoint(unittest.TestCase):
             "html_url": "https://github.com/facebook/react",
         })
 
-        result = get_github_repository_metadata_query("https://github.com/facebook/react")
+        result = get_github_repository_metadata_query(current_user=None, url="https://github.com/facebook/react")
         self.assertEqual(result.name, "react")
         self.assertEqual(result.owner, "facebook")
 
@@ -231,10 +234,18 @@ class TestGitHubMetadataEndpoint(unittest.TestCase):
 class TestRepositoryDatabaseEndpoints(unittest.TestCase):
     def setUp(self):
         self.db = SessionLocal()
+        self.test_user = self.db.query(User).filter_by(email="test@example.com").first()
+        if not self.test_user:
+            self.test_user = User(email="test@example.com", password_hash="hash")
+            self.db.add(self.test_user)
+            self.db.commit()
+            self.db.refresh(self.test_user)
         self._cleanup()
 
     def tearDown(self):
         self._cleanup()
+        self.db.delete(self.test_user)
+        self.db.commit()
         self.db.close()
 
     def _cleanup(self):
@@ -245,12 +256,20 @@ class TestRepositoryDatabaseEndpoints(unittest.TestCase):
             self.db.delete(repo)
         self.db.commit()
 
-    def test_connect_github_repository_success(self):
+    @patch("app.api.routes.repositories.fetch_github_metadata")
+    def test_connect_github_repository_success(self, mock_metadata):
+        from app.services.github import GitHubRepoMetadata
+        mock_metadata.return_value = GitHubRepoMetadata(
+            owner="test-org", name="test-project",
+            full_name="test-org/test-project",
+            description=None, default_branch="develop",
+            url="https://github.com/test-org/test-project",
+        )
         payload = GitHubRepositoryCreate(
             url="https://github.com/test-org/test-project",
-            default_branch="develop",
+            default_branch="develop", user_id=1,
         )
-        repo = connect_github_repository(payload, self.db)
+        repo = connect_github_repository(payload, self.db, current_user=self.test_user)
         self.assertIsNotNone(repo.id)
         self.assertEqual(repo.name, "test-project")
         self.assertEqual(repo.owner, "test-org")
@@ -258,38 +277,55 @@ class TestRepositoryDatabaseEndpoints(unittest.TestCase):
         self.assertEqual(repo.url, "https://github.com/test-org/test-project")
         self.assertEqual(repo.default_branch, "develop")
 
-    def test_connect_github_repository_duplicate_raises_409(self):
+    @patch("app.api.routes.repositories.fetch_github_metadata")
+    def test_connect_github_repository_duplicate_raises_409(self, mock_metadata):
+        from app.services.github import GitHubRepoMetadata
+        meta = GitHubRepoMetadata(
+            owner="test-org", name="duplicate-project",
+            full_name="test-org/duplicate-project",
+            description=None, default_branch="main",
+            url="https://github.com/test-org/duplicate-project",
+        )
+        mock_metadata.return_value = meta
         payload = GitHubRepositoryCreate(url="https://github.com/test-org/duplicate-project")
-        connect_github_repository(payload, self.db)
+        connect_github_repository(payload, self.db, current_user=self.test_user)
 
         with self.assertRaises(HTTPException) as ctx:
-            connect_github_repository(payload, self.db)
+            connect_github_repository(payload, self.db, current_user=self.test_user)
         self.assertEqual(ctx.exception.status_code, 409)
 
     def test_connect_github_repository_invalid_url_raises_400(self):
         payload = GitHubRepositoryCreate(url="https://notgithub.com/test-org/proj")
         with self.assertRaises(HTTPException) as ctx:
-            connect_github_repository(payload, self.db)
+            connect_github_repository(payload, self.db, current_user=self.test_user)
         self.assertEqual(ctx.exception.status_code, 400)
 
     def test_create_repository_with_url_auto_parse(self):
         payload = RepositoryCreate(url="https://github.com/test-url-org/auto-parsed.git")
-        repo = create_repository(payload, self.db)
+        repo = create_repository(payload, self.db, current_user=self.test_user)
         self.assertEqual(repo.name, "auto-parsed")
         self.assertEqual(repo.owner, "test-url-org")
         self.assertEqual(repo.full_name, "test-url-org/auto-parsed")
 
     def test_delete_repository_not_found(self):
         with self.assertRaises(HTTPException) as ctx:
-            delete_repository(999999, db=self.db)
+            delete_repository(999999, db=self.db, current_user=self.test_user)
         self.assertEqual(ctx.exception.status_code, 404)
 
-    def test_delete_repository_success_with_cascade(self):
+    @patch("app.api.routes.repositories.fetch_github_metadata")
+    def test_delete_repository_success_with_cascade(self, mock_metadata):
+        from app.services.github import GitHubRepoMetadata
+        mock_metadata.return_value = GitHubRepoMetadata(
+            owner="test-org", name="delete-cascade-repo",
+            full_name="test-org/delete-cascade-repo",
+            description=None, default_branch="main",
+            url="https://github.com/test-org/delete-cascade-repo",
+        )
         payload = GitHubRepositoryCreate(
             url="https://github.com/test-org/delete-cascade-repo",
-            default_branch="main",
+            default_branch="main", user_id=1,
         )
-        repo = connect_github_repository(payload, self.db)
+        repo = connect_github_repository(payload, self.db, current_user=self.test_user)
         repo_id = repo.id
 
         # Add related SourceFile and Finding
@@ -317,7 +353,7 @@ class TestRepositoryDatabaseEndpoints(unittest.TestCase):
         self.assertEqual(self.db.query(Finding).filter(Finding.repository_id == repo_id).count(), 1)
 
         # Execute delete
-        res = delete_repository(repo_id, db=self.db)
+        res = delete_repository(repo_id, db=self.db, current_user=self.test_user)
         self.assertEqual(res["status"], "ok")
 
         # Verify repository and cascading records are gone
