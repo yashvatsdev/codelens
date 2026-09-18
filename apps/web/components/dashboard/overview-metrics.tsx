@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useMemo } from "react";
 import {
@@ -31,9 +31,33 @@ export function OverviewMetrics({
   warningCount,
   infoCount,
 }: OverviewMetricsProps) {
-  // Aggregate real health score across all repositories
-  const health = useMemo(() => calculateHealthScore(findings), [findings]);
-  const colors = useMemo(() => getHealthColor(health.label), [health.label]);
+  // Only repos that have been ingested/analyzed (filesCount > 0)
+  const analyzedRepos = useMemo(
+    () => repositories.filter((r) => (r.filesCount || 0) > 0),
+    [repositories],
+  );
+
+  // Workspace health = average of each analyzed repo's individual score.
+  // Returns null when no repos have been analyzed yet.
+  const workspaceHealth = useMemo(() => {
+    if (analyzedRepos.length === 0) return null;
+    let sum = 0;
+    for (const r of analyzedRepos) {
+      const repoFindings = findings.filter((f) => f.repository_id === r.id);
+      sum += calculateHealthScore(repoFindings).score;
+    }
+    const avgScore = Math.round(sum / analyzedRepos.length);
+    let label: "Excellent" | "Good" | "Fair" | "Poor" = "Excellent";
+    if (avgScore < 50) label = "Poor";
+    else if (avgScore < 75) label = "Fair";
+    else if (avgScore < 90) label = "Good";
+    return { score: avgScore, label };
+  }, [analyzedRepos, findings]);
+
+  const colors = useMemo(
+    () => (workspaceHealth ? getHealthColor(workspaceHealth.label) : null),
+    [workspaceHealth],
+  );
 
   // Aggregate total stored files across all repositories
   const totalFiles = useMemo(
@@ -48,33 +72,50 @@ export function OverviewMetrics({
 
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-      {/* 1. Health Score Metric */}
+      {/* 1. Workspace Health Metric */}
       <div className="rounded-xl border border-white/[0.08] bg-white/[0.025] p-5 shadow-sm hover:border-white/[0.12] transition">
         <div className="flex items-center justify-between">
           <span className="text-xs font-medium text-zinc-400 uppercase tracking-wider font-mono">
-            Health Score
+            Workspace Health
           </span>
           <span
-            className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-medium border font-mono ${colors.badge}`}
+            className={`inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] font-medium border font-mono ${
+              colors
+                ? colors.badge
+                : "bg-zinc-500/15 text-zinc-400 border-zinc-500/30"
+            }`}
           >
-            {health.label === "Excellent" || health.label === "Good" ? (
-              <ShieldCheck className="size-3" />
+            {workspaceHealth ? (
+              workspaceHealth.label === "Excellent" ||
+              workspaceHealth.label === "Good" ? (
+                <ShieldCheck className="size-3" />
+              ) : (
+                <ShieldAlert className="size-3" />
+              )
             ) : (
               <ShieldAlert className="size-3" />
             )}
-            {health.label}
+            {workspaceHealth ? workspaceHealth.label : "N/A"}
           </span>
         </div>
         <div className="mt-3 flex items-baseline gap-2">
-          <span className={`text-3xl font-bold font-mono tracking-tight ${colors.text}`}>
-            {health.score}
+          <span
+            className={`text-3xl font-bold font-mono tracking-tight ${
+              colors ? colors.text : "text-zinc-500"
+            }`}
+          >
+            {workspaceHealth ? workspaceHealth.score : "–"}
           </span>
-          <span className="text-xs font-mono text-zinc-500">/ 100</span>
+          <span className="text-xs font-mono text-zinc-500">
+            {workspaceHealth ? "/ 100" : ""}
+          </span>
         </div>
         <p className="mt-2 text-xs text-zinc-400">
-          {health.totalFindings === 0
-            ? "Clean codebase · 0 penalties"
-            : `${health.totalFindings} active findings evaluated`}
+          {workspaceHealth
+            ? `${analyzedRepos.length} of ${repositories.length} ${
+                repositories.length === 1 ? "repository" : "repositories"
+              } analyzed`
+            : "No repositories analyzed yet"}
         </p>
       </div>
 
@@ -95,11 +136,13 @@ export function OverviewMetrics({
           {errorCount > 0 ? (
             <span className="inline-flex items-center gap-1 text-red-400 font-medium">
               <AlertCircle className="size-3" />
-              {errorCount} {errorCount === 1 ? "error" : "errors"} need attention
+              {errorCount} {errorCount === 1 ? "error" : "errors"} need
+              attention
             </span>
           ) : (
             <span className="text-zinc-400">
-              {warningCount} {warningCount === 1 ? "warning" : "warnings"} · {infoCount} info
+              {warningCount} {warningCount === 1 ? "warning" : "warnings"} ·{" "}
+              {infoCount} info
             </span>
           )}
         </div>

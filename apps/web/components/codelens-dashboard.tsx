@@ -2026,18 +2026,52 @@ function RepositoryHealthCard({
     return findings.filter((f) => f.repository_id === selectedRepoId);
   }, [findings, selectedRepoId]);
 
-  const health = useMemo(
-    () => calculateHealthScore(activeFindings),
-    [activeFindings],
+  const analyzedRepositories = useMemo(
+    () => repositories.filter((r) => (r.filesCount || 0) > 0),
+    [repositories],
   );
 
-  const colors = getHealthColor(health.label);
+  const health = useMemo(() => {
+    const aggregate = calculateHealthScore(activeFindings);
+    // Per-repo view: use aggregate directly
+    if (selectedRepoId !== "all") return aggregate;
+    // Workspace view: average over analyzed repos only
+    if (analyzedRepositories.length === 0) {
+      // sentinel -1 means "not analyzed"
+      return { ...aggregate, score: -1, label: "Excellent" as const };
+    }
+    let sum = 0;
+    for (const r of analyzedRepositories) {
+      const rf = findings.filter((f) => f.repository_id === r.id);
+      sum += calculateHealthScore(rf).score;
+    }
+    const avgScore = Math.round(sum / analyzedRepositories.length);
+    let avgLabel: "Excellent" | "Good" | "Fair" | "Poor" = "Excellent";
+    if (avgScore < 50) avgLabel = "Poor";
+    else if (avgScore < 75) avgLabel = "Fair";
+    else if (avgScore < 90) avgLabel = "Good";
+    return { ...aggregate, score: avgScore, label: avgLabel };
+  }, [activeFindings, selectedRepoId, analyzedRepositories, findings]);
+
+  const notAnalyzed = selectedRepoId === "all" && health.score === -1;
+
+  let colors = getHealthColor(health.label);
+  if (notAnalyzed) {
+    colors = {
+      text: "text-zinc-500",
+      bg: "bg-zinc-950/30",
+      border: "border-zinc-500/30",
+      stroke: "#52525b",
+      badge: "bg-zinc-500/15 text-zinc-400 border-zinc-500/30",
+    };
+  }
 
   // SVG Gauge calculations
   const radius = 42;
   const strokeWidth = 7;
   const circumference = 2 * Math.PI * radius;
-  const strokeDashoffset = circumference - (health.score / 100) * circumference;
+  const strokeDashoffset =
+    circumference - (Math.max(0, health.score) / 100) * circumference;
 
   const selectedRepoName = useMemo(() => {
     if (selectedRepoId === "all") return "All Repositories";
@@ -2068,11 +2102,20 @@ function RepositoryHealthCard({
             </span>
           </div>
           <h3 className="mt-1 text-base font-semibold text-zinc-100 flex items-center gap-2">
-            Repository Health Score
+            {selectedRepoId === "all"
+              ? "WORKSPACE HEALTH"
+              : "Repository Health Score"}
             <span className="text-xs font-normal text-zinc-500 font-mono">
               ({selectedRepoName})
             </span>
           </h3>
+          {selectedRepoId === "all" && (
+            <p className="mt-0.5 text-[11px] text-zinc-500">
+              {analyzedRepositories.length === 0
+                ? "No repositories analyzed yet"
+                : `${analyzedRepositories.length} of ${repositories.length} ${repositories.length === 1 ? "repository" : "repositories"} analyzed`}
+            </p>
+          )}
         </div>
 
         {/* Repository Filter Dropdown */}
@@ -2141,22 +2184,26 @@ function RepositoryHealthCard({
               <span
                 className={`font-mono text-2xl font-bold tracking-tight ${colors.text}`}
               >
-                {health.score}
+                {notAnalyzed ? "–" : health.score}
               </span>
-              <span className="font-mono text-[10px] text-zinc-500">/ 100</span>
+              <span className="font-mono text-[10px] text-zinc-500">
+                {notAnalyzed ? "N/A" : "/ 100"}
+              </span>
             </div>
           </div>
 
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5">
               <span className={`text-base font-semibold ${colors.text}`}>
-                {health.label} Health
+                {notAnalyzed ? "Not Analyzed" : `${health.label} Health`}
               </span>
             </div>
             <p className="mt-1 text-xs text-zinc-400 leading-snug">
-              {health.totalFindings === 0
-                ? "Clean codebase. Zero detected static findings."
-                : `${health.totalFindings} active findings evaluated.`}
+              {notAnalyzed
+                ? "Run analysis on at least one repository to see workspace health."
+                : health.totalFindings === 0
+                  ? "Clean codebase. Zero detected static findings."
+                  : `${health.totalFindings} active findings evaluated.`}
             </p>
             <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px] font-mono text-zinc-500">
               {health.deductions.errors > 0 && (
