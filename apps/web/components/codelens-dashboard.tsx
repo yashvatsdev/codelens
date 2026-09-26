@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -128,7 +128,7 @@ function StatCard({
   tone?: "default" | "danger" | "warn" | "success";
 }) {
   return (
-    <div className="rounded-xl border border-white/[0.08] bg-white/[0.035] p-4 shadow-[0_12px_40px_-24px_rgba(0,0,0,.8)]">
+    <div className="cl-card p-4">
       <div className="flex items-start justify-between">
         <div className="text-[12px] text-zinc-500">{label}</div>
         <Icon
@@ -483,7 +483,7 @@ export function CodeLensDashboard() {
             }, 5000);
           }
         } catch {
-          // transient fetch error Ã¢â‚¬â€ keep polling
+          // transient fetch error - keep polling
         }
       }, 1200);
     } catch (err) {
@@ -802,7 +802,7 @@ export function CodeLensDashboard() {
 
       {/* Main Content Area */}
       <div className="lg:pl-60">
-        <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-white/[0.07] bg-[#090a0b]/90 px-4 backdrop-blur-md sm:px-8">
+        <header className="sticky top-0 z-20 flex h-16 items-center justify-between border-b border-zinc-800/60 bg-zinc-950/90 px-4 backdrop-blur-md sm:px-8">
           <div className="flex items-center gap-3">
             <button
               onClick={() => setMobileOpen(true)}
@@ -953,13 +953,14 @@ export function CodeLensDashboard() {
               <button
                 onClick={() => setNotice("")}
                 className="text-zinc-500 hover:text-zinc-300"
+                aria-label="Dismiss notice"
               >
                 <X className="size-3.5" />
               </button>
             </div>
           )}
 
-          {/* Scan Progress Overlay Ã¢â‚¬â€ one card per active scan */}
+          {/* Scan Progress Overlay - one card per active scan */}
           {Object.entries(activeScans).length > 0 && (
             <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 w-full max-w-sm px-4 pointer-events-none">
               {Object.entries(activeScans).map(([repoIdStr, scan]) => {
@@ -979,7 +980,7 @@ export function CodeLensDashboard() {
                 return (
                   <div
                     key={repoId}
-                    className="pointer-events-auto rounded-xl border border-white/[0.1] bg-[#111416] p-4 shadow-2xl"
+                    className="pointer-events-auto cl-card p-4 shadow-2xl"
                   >
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-xs font-medium text-zinc-200 truncate max-w-[200px]">
@@ -1004,7 +1005,7 @@ export function CodeLensDashboard() {
                     </div>
 
                     {/* Progress bar */}
-                    <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden mb-2">
+                    <div className="h-1.5 rounded-full bg-zinc-800 overflow-hidden mb-2">
                       <div
                         className={`h-full rounded-full transition-all duration-500 ${
                           scan.status === "failed"
@@ -1418,7 +1419,7 @@ export function CodeLensDashboard() {
                         <span className="inline-block size-1.5 rounded-full bg-rose-500" />
                         Original Code
                       </div>
-                      <pre className="rounded-lg border border-white/[0.08] bg-black/40 p-3 font-mono text-xs text-zinc-300 overflow-x-auto max-h-48 whitespace-pre-wrap">
+                      <pre className="rounded-lg border border-zinc-800/60 bg-zinc-950 p-3 font-mono text-xs text-zinc-300 overflow-x-auto max-h-48 whitespace-pre-wrap">
                         <code>
                           {fixResult.original_code || "(No snippet provided)"}
                         </code>
@@ -1437,7 +1438,7 @@ export function CodeLensDashboard() {
                           <span>Line removed</span>
                         </div>
                       ) : (
-                        <pre className="rounded-lg border border-white/[0.08] bg-black/40 p-3 font-mono text-xs text-zinc-300 overflow-x-auto max-h-48 whitespace-pre-wrap">
+                        <pre className="rounded-lg border border-zinc-800/60 bg-zinc-950 p-3 font-mono text-xs text-zinc-300 overflow-x-auto max-h-48 whitespace-pre-wrap">
                           <code>{fixResult.fixed_code}</code>
                         </pre>
                       )}
@@ -1479,7 +1480,7 @@ export function CodeLensDashboard() {
                         className={`rounded-lg border p-3 font-mono text-xs text-zinc-300 overflow-x-auto max-h-56 whitespace-pre-wrap transition-all ${
                           isFixApplied
                             ? "border-emerald-500/40 bg-emerald-950/15 shadow-[0_0_20px_rgba(16,185,129,0.1)]"
-                            : "border-white/[0.08] bg-black/50"
+                            : "border-zinc-800/50 bg-zinc-950/30"
                         }`}
                       >
                         <code>{fixResult.resulting_code}</code>
@@ -1488,7 +1489,7 @@ export function CodeLensDashboard() {
                   )}
 
                   {/* GitHub Branch & Pull Request Flow */}
-                  <div className="pt-2 border-t border-white/[0.06] space-y-3">
+                  <div className="pt-2 border-t border-zinc-800/60 space-y-3">
                     <div className="flex items-center justify-between">
                       <div className="text-xs font-semibold text-zinc-300 flex items-center gap-1.5">
                         <GitBranch className="size-3.5 text-cyan-400" />
@@ -1606,7 +1607,7 @@ export function CodeLensDashboard() {
                           )}
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 font-mono text-[11px] bg-black/40 p-2.5 rounded border border-white/[0.06]">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 font-mono text-[11px] bg-zinc-950/50 p-2.5 rounded border border-zinc-800/60">
                           <div>
                             <span className="text-zinc-500">Branch: </span>
                             <span className="text-zinc-200">
@@ -1634,7 +1635,7 @@ export function CodeLensDashboard() {
                                     `fix: resolve ${selectedFinding?.rule_id || "issue"} in ${selectedFinding?.file_path || "file"}`,
                                   );
                                   setPrBodyInput(
-                                    `## Ã°Å¸â€Â CodeLens AI Proposed Fix\n\nThis Pull Request proposes an automated code fix for finding **\`${selectedFinding?.rule_id || ""}\`**.\n\n- **File:** \`${selectedFinding?.file_path || "unknown"}\`\n- **Severity:** \`${selectedFinding?.severity?.toUpperCase() || ""}\`\n- **Issue:** ${selectedFinding?.message || ""}\n- **Branch:** \`${gitHubApplyResult.branch_name}\`\n\n---\n*Created automatically by CodeLens*`,
+                                    `## 🛠️ CodeLens AI Proposed Fix\n\nThis Pull Request proposes an automated code fix for finding **\`${selectedFinding?.rule_id || ""}\`**.\n\n- **File:** \`${selectedFinding?.file_path || "unknown"}\`\n- **Severity:** \`${selectedFinding?.severity?.toUpperCase() || ""}\`\n- **Issue:** ${selectedFinding?.message || ""}\n- **Branch:** \`${gitHubApplyResult.branch_name}\`\n\n---\n*Created automatically by CodeLens*`,
                                   );
                                   setCreatePRError(null);
                                 }}
@@ -1665,7 +1666,7 @@ export function CodeLensDashboard() {
                               value={prTitleInput}
                               onChange={(e) => setPrTitleInput(e.target.value)}
                               placeholder="Pull request title..."
-                              className="w-full rounded-md border border-white/[0.1] bg-black/50 px-2.5 py-1.5 text-xs text-zinc-200 focus:border-cyan-300/50 focus:outline-none"
+                              className="w-full cl-input px-2.5 py-1.5 font-sans"
                             />
                           </div>
                           <div>
@@ -1677,7 +1678,7 @@ export function CodeLensDashboard() {
                               value={prBodyInput}
                               onChange={(e) => setPrBodyInput(e.target.value)}
                               placeholder="Pull request description..."
-                              className="w-full rounded-md border border-white/[0.1] bg-black/50 px-2.5 py-1.5 text-xs text-zinc-200 font-mono focus:border-cyan-300/50 focus:outline-none leading-relaxed"
+                              className="w-full cl-input px-2.5 py-1.5 font-mono leading-relaxed"
                             />
                           </div>
                         </div>
@@ -1753,7 +1754,7 @@ export function CodeLensDashboard() {
                           </span>
                         </div>
 
-                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 font-mono text-[11px] bg-black/40 p-2.5 rounded border border-white/[0.06]">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 font-mono text-[11px] bg-zinc-950/50 p-2.5 rounded border border-zinc-800/60">
                           <div>
                             <span className="text-zinc-500">PR: </span>
                             <span className="text-zinc-200">
@@ -1933,10 +1934,10 @@ export function CodeLensDashboard() {
           onClick={() => setViewingFilesRepoId(null)}
         >
           <div
-            className="w-full max-w-2xl max-h-[80vh] flex flex-col rounded-xl border border-white/[0.1] bg-[#111315] p-6 shadow-2xl"
+            className="w-full max-w-2xl max-h-[80vh] flex flex-col cl-card overflow-hidden pr-page--d1 shadow-2xl p-0"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="flex items-start justify-between border-b border-white/[0.07] pb-4">
+            <div className="flex items-start justify-between border-b border-zinc-800/60 p-6 pb-4">
               <div>
                 <h2 className="font-medium text-zinc-100">
                   Stored Source Files
@@ -1952,7 +1953,7 @@ export function CodeLensDashboard() {
                 <X className="size-4" />
               </button>
             </div>
-            <div className="overflow-y-auto mt-4 flex-1">
+            <div className="overflow-y-auto flex-1 p-6 pt-0">
               {(repoFilesMap[viewingFilesRepoId] || []).length === 0 ? (
                 <div className="py-12 text-center text-sm text-zinc-500">
                   <FileCode2 className="mx-auto size-6 text-zinc-600 mb-2" />
@@ -2080,9 +2081,9 @@ function RepositoryHealthCard({
   }, [repositories, selectedRepoId]);
 
   return (
-    <section className="rounded-xl border border-white/[0.08] bg-white/[0.025] p-5 sm:p-6 backdrop-blur-sm shadow-xl">
+    <section className="cl-card p-5 sm:p-6">
       {/* Header with Title & Repository Selector */}
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-white/[0.06] pb-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between border-b border-zinc-800/60 pb-4">
         <div>
           <div className="flex items-center gap-2">
             <span className="font-mono text-[10px] uppercase tracking-[0.2em] text-cyan-300/70">
@@ -2136,13 +2137,13 @@ function RepositoryHealthCard({
                     e.target.value === "all" ? "all" : Number(e.target.value),
                   )
                 }
-                className="appearance-none rounded-lg border border-white/[0.1] bg-[#111315] px-3 py-1.5 pr-8 font-mono text-xs text-zinc-300 hover:border-white/[0.2] focus:border-cyan-400 focus:outline-none transition cursor-pointer"
+                className="appearance-none rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 pr-8 font-mono text-xs text-zinc-300 hover:border-zinc-700 focus:border-cyan-400 focus:outline-none transition cursor-pointer"
               >
-                <option value="all">
+                <option value="all" className="bg-zinc-900">
                   All Connected Repositories ({findings.length} findings)
                 </option>
                 {repositories.map((repo, i) => (
-                  <option key={repo.id} value={repo.id}>
+                  <option key={repo.id} value={repo.id} className="bg-zinc-900">
                     {repo.full_name} ({repo.findingsCount || 0} findings)
                   </option>
                 ))}
@@ -2156,7 +2157,7 @@ function RepositoryHealthCard({
       {/* Main Health Card Content Grid */}
       <div className="mt-6 grid gap-6 lg:grid-cols-12 items-center">
         {/* Overall Score Circle & Label */}
-        <div className="lg:col-span-4 flex items-center gap-5 p-4 rounded-xl border border-white/[0.04] bg-black/20">
+        <div className="lg:col-span-4 flex items-center gap-5 p-4 rounded-xl border border-zinc-800/50 bg-zinc-950/30">
           <div className="relative size-24 shrink-0 flex items-center justify-center">
             <svg className="size-24 -rotate-90" viewBox="0 0 100 100">
               <circle
@@ -2184,7 +2185,7 @@ function RepositoryHealthCard({
               <span
                 className={`font-mono text-2xl font-bold tracking-tight ${colors.text}`}
               >
-                {notAnalyzed ? "Ã¢â‚¬â€œ" : health.score}
+                {notAnalyzed ? "--" : health.score}
               </span>
               <span className="font-mono text-[10px] text-zinc-500">
                 {notAnalyzed ? "N/A" : "/ 100"}
@@ -2208,17 +2209,17 @@ function RepositoryHealthCard({
             <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px] font-mono text-zinc-500">
               {health.deductions.errors > 0 && (
                 <span className="text-red-400">
-                  Ã¢Ë†â€™{health.deductions.errors} errors
+                  -{health.deductions.errors} errors
                 </span>
               )}
               {health.deductions.warnings > 0 && (
                 <span className="text-amber-400">
-                  Ã¢Ë†â€™{health.deductions.warnings} warn
+                  -{health.deductions.warnings} warn
                 </span>
               )}
               {health.deductions.info > 0 && (
                 <span className="text-cyan-400">
-                  Ã¢Ë†â€™{health.deductions.info} info
+                  -{health.deductions.info} info
                 </span>
               )}
               {health.totalFindings === 0 && (
@@ -2230,7 +2231,7 @@ function RepositoryHealthCard({
 
         {/* Severity Metrics (Total findings, errors, warnings, info) */}
         <div className="lg:col-span-4 grid grid-cols-2 gap-2.5">
-          <div className="rounded-lg border border-white/[0.05] bg-black/20 p-3">
+          <div className="rounded-lg border border-zinc-800/50 bg-zinc-950/30 p-3">
             <div className="flex items-center justify-between">
               <span className="text-[11px] text-zinc-400 font-medium">
                 Total Findings
@@ -2253,7 +2254,7 @@ function RepositoryHealthCard({
             <div className="mt-1 font-mono text-xl font-bold text-red-400">
               {health.errorCount}
             </div>
-            <p className="text-[10px] text-red-400/80 mt-0.5">Ã¢Ë†â€™15 pts each</p>
+            <p className="text-[10px] text-red-400/80 mt-0.5">-15 pts each</p>
           </div>
 
           <div className="rounded-lg border border-amber-500/20 bg-amber-950/10 p-3">
@@ -2266,7 +2267,7 @@ function RepositoryHealthCard({
             <div className="mt-1 font-mono text-xl font-bold text-amber-400">
               {health.warningCount}
             </div>
-            <p className="text-[10px] text-amber-400/80 mt-0.5">Ã¢Ë†â€™5 pts each</p>
+            <p className="text-[10px] text-amber-400/80 mt-0.5">-5 pts each</p>
           </div>
 
           <div className="rounded-lg border border-cyan-500/20 bg-cyan-950/10 p-3">
@@ -2279,12 +2280,12 @@ function RepositoryHealthCard({
             <div className="mt-1 font-mono text-xl font-bold text-cyan-400">
               {health.infoCount}
             </div>
-            <p className="text-[10px] text-cyan-400/80 mt-0.5">Ã¢Ë†â€™1 pt each</p>
+            <p className="text-[10px] text-cyan-400/80 mt-0.5">-1 pt each</p>
           </div>
         </div>
 
         {/* Category Breakdown */}
-        <div className="lg:col-span-4 rounded-xl border border-white/[0.05] bg-black/20 p-4">
+        <div className="lg:col-span-4 rounded-xl border border-zinc-800/50 bg-zinc-950/30 p-4">
           <div className="flex items-center justify-between mb-3">
             <span className="text-xs font-medium text-zinc-200 flex items-center gap-1.5">
               <Activity className="size-3.5 text-cyan-400" />
@@ -2294,7 +2295,7 @@ function RepositoryHealthCard({
               onClick={onNavigateFindings}
               className="text-[11px] text-cyan-400 hover:text-cyan-300 transition"
             >
-              Explore Ã¢â€ â€™
+              Explore →
             </button>
           </div>
 
@@ -2326,7 +2327,7 @@ function RepositoryHealthCard({
                         {cat.percentage}%)
                       </span>
                     </div>
-                    <div className="h-1.5 w-full rounded-full bg-white/[0.06] overflow-hidden">
+                    <div className="h-1.5 w-full rounded-full bg-zinc-800 overflow-hidden">
                       <div
                         className={`h-full ${barColor} rounded-full transition-all duration-500`}
                         style={{ width: `${Math.max(6, cat.percentage)}%` }}
@@ -2341,15 +2342,15 @@ function RepositoryHealthCard({
       </div>
 
       {/* Transparent Formula Note Footer */}
-      <div className="mt-5 pt-3.5 border-t border-white/[0.05] flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px] text-zinc-500 font-mono">
+      <div className="mt-5 pt-3.5 border-t border-zinc-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px] text-zinc-500 font-mono">
         <div className="flex items-center gap-1.5">
           <span className="inline-block size-1 rounded-full bg-cyan-400" />
           <span>
-            Scoring Formula: Base 100 Ã¢Ë†â€™ (Errors Ãƒ— 15) Ã¢Ë†â€™ (Warnings Ãƒ— 5) Ã¢Ë†â€™ (Info Ãƒ—
+            Scoring Formula: Base 100 - (Errors × 15) - (Warnings × 5) - (Info ×
             1), clamped [0, 100]
           </span>
         </div>
-        <div className="text-zinc-600">Deterministic Ã‚Â· No AI inference</div>
+        <div className="text-zinc-600">Deterministic · No AI inference</div>
       </div>
     </section>
   );
@@ -2566,6 +2567,7 @@ function RepositoriesContent({
                       disabled={deletingRepoId === repo.id}
                       className="text-zinc-600 hover:text-rose-400 transition-colors disabled:opacity-50 cursor-pointer"
                       title="Delete repository"
+                      aria-label="Delete repository"
                     >
                       {deletingRepoId === repo.id ? (
                         <Loader2 className="size-3.5 animate-spin text-rose-400" />
@@ -2944,7 +2946,7 @@ function FindingsContent({
               >
                 Expand all
               </button>
-              <span>Ã‚Â·</span>
+              <span>·</span>
               <button
                 type="button"
                 onClick={collapseAll}
@@ -2977,7 +2979,7 @@ function FindingsContent({
               return (
                 <div
                   key={group.repo.id}
-                  className="overflow-hidden rounded-xl border border-white/[0.08] bg-[#0c0d0e]/90 shadow-lg transition"
+                  className="cl-card overflow-hidden shadow-lg transition"
                 >
                   {/* Accordion Repository Header */}
                   <div
@@ -3256,14 +3258,14 @@ function SettingsContent({
   backendHealthy: boolean | null;
 }) {
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-8 pr-page">
       <PageHeading
         eyebrow="Manage / Settings"
         title="Settings"
         description="Workspace configuration and API connectivity details."
       />
 
-      <div className="max-w-2xl rounded-xl border border-white/[0.08] bg-white/[0.025] p-6 space-y-6">
+      <div className="max-w-2xl cl-card p-6 pr-page--d1 flex flex-col gap-6">
         <div>
           <h3 className="text-sm font-medium text-zinc-200">
             Backend API Connection
@@ -3271,7 +3273,7 @@ function SettingsContent({
           <p className="mt-1 text-xs text-zinc-500">
             Target URL for FastAPI server endpoints and database health.
           </p>
-          <div className="mt-3 flex items-center gap-2 rounded-lg border border-white/[0.08] bg-black/30 px-3 py-2.5 font-mono text-xs text-zinc-400">
+          <div className="mt-3 flex items-center gap-2 rounded-lg border border-zinc-800 bg-zinc-950 px-3 py-2.5 font-mono text-xs text-zinc-300">
             <TerminalSquare className="size-4 text-cyan-300" />
             {process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000"}
           </div>
@@ -3291,7 +3293,7 @@ function SettingsContent({
           </div>
         </div>
 
-        <div className="border-t border-white/[0.07] pt-6">
+        <div className="border-t border-zinc-800/60 pt-6 pr-page--d2">
           <h3 className="text-sm font-medium text-zinc-200">
             Supported Workflow
           </h3>

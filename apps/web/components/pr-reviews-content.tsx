@@ -894,7 +894,7 @@ export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
 
                               {/* Generated Fix Display */}
                               {fix && (
-                                <div className="space-y-3 rounded-lg border border-purple-500/20 bg-[#0d0f14] p-3.5 animate-in fade-in duration-200">
+                                <div className="space-y-3 rounded-lg border border-purple-500/20 bg-purple-950/10 p-3.5 animate-in fade-in duration-200">
                                   {/* Header: AI FIX title & controls */}
                                   <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800/60 pb-2.5">
                                     <div className="flex items-center gap-2">
