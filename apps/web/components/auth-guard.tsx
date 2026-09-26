@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/lib/auth-context";
+import { Loader2 } from "lucide-react";
 
 /**
  * Wraps any page that requires authentication.
@@ -22,29 +23,10 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   // Show nothing while resolving session to avoid flashing dashboard
   if (loading || !user) {
     return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-        <div className="flex items-center gap-3 text-gray-400 text-sm">
-          <svg
-            className="h-5 w-5 animate-spin text-cyan-400"
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-          >
-            <circle
-              className="opacity-25"
-              cx="12"
-              cy="12"
-              r="10"
-              stroke="currentColor"
-              strokeWidth="4"
-            />
-            <path
-              className="opacity-75"
-              fill="currentColor"
-              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-            />
-          </svg>
-          Loading…
+      <div className="min-h-screen bg-[#090a0b] flex items-center justify-center">
+        <div className="flex items-center gap-3 text-zinc-400 text-sm cl-fade-up">
+          <Loader2 className="size-5 animate-spin text-cyan-300" />
+          Authenticating…
         </div>
       </div>
     );
@@ -52,4 +34,3 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
 
   return <>{children}</>;
 }
-

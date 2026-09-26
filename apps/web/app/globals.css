@@ -1,18 +1,209 @@
 @import "tailwindcss";
 
+/* ─── Colour scheme ──────────────────────────────────────────────────────── */
 :root {
   color-scheme: dark;
   --background: #090a0b;
   --foreground: #f4f4f5;
+
+  /* Surface palette */
+  --bg-base: #090a0b;
+  --bg-surface: #0d0f10;
+  --bg-elevated: #111315;
+  --bg-overlay: rgba(255, 255, 255, 0.025);
+
+  /* Border tokens */
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-base: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.12);
+
+  /* Text tokens */
+  --text-primary: #f4f4f5; /* zinc-100 */
+  --text-secondary: #a1a1aa; /* zinc-400 */
+  --text-muted: #71717a; /* zinc-500 */
+  --text-faint: #52525b; /* zinc-600 */
+
+  /* Accent */
+  --accent: #67e8f9; /* cyan-300 */
+  --accent-hover: #a5f3fc; /* cyan-200 */
+  --accent-dim: rgba(103, 232, 249, 0.1);
+
+  /* Semantic */
+  --color-error: #f87171; /* red-400  */
+  --color-warn: #fbbf24; /* amber-400 */
+  --color-ok: #34d399; /* emerald-400 */
+
+  /* Spacing scale */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-xl: 18px;
 }
 
+/* ─── Base ───────────────────────────────────────────────────────────────── */
 body {
   background: var(--background);
   color: var(--foreground);
   min-height: 100vh;
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 button,
-input {
+input,
+textarea,
+select {
   font: inherit;
+}
+
+/* ─── Scrollbar ──────────────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+/* ─── Selection ──────────────────────────────────────────────────────────── */
+::selection {
+  background: rgba(103, 232, 249, 0.25);
+  color: #f4f4f5;
+}
+
+/* ─── Focus ring ─────────────────────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid rgba(103, 232, 249, 0.6);
+  outline-offset: 2px;
+}
+
+/* ─── Utility: Glassmorphism card ────────────────────────────────────────── */
+.cl-card {
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border-base);
+  background: var(--bg-overlay);
+  backdrop-filter: blur(8px);
+}
+
+/* ─── Utility: Auth-page input ───────────────────────────────────────────── */
+.cl-input {
+  width: 100%;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-base);
+  background: rgba(0, 0, 0, 0.35);
+  padding: 0.625rem 0.875rem;
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  outline: none;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease;
+}
+.cl-input::placeholder {
+  color: var(--text-faint);
+}
+.cl-input:focus {
+  border-color: rgba(103, 232, 249, 0.6);
+  box-shadow: 0 0 0 3px rgba(103, 232, 249, 0.12);
+}
+
+/* ─── Utility: Auth-page submit button ───────────────────────────────────── */
+.cl-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  border-radius: var(--radius-md);
+  background: var(--accent);
+  padding: 0.65rem 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #020617; /* slate-950 */
+  transition:
+    background 150ms ease,
+    opacity 150ms ease;
+  cursor: pointer;
+}
+.cl-btn-primary:hover:not(:disabled) {
+  background: var(--accent-hover);
+}
+.cl-btn-primary:focus-visible {
+  outline: 2px solid rgba(103, 232, 249, 0.6);
+  outline-offset: 2px;
+}
+.cl-btn-primary:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* ─── Utility: Monospace label ───────────────────────────────────────────── */
+.cl-mono-label {
+  font-family: var(--font-geist-mono, monospace);
+  font-size: 0.625rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+/* ─── Animate-in helper ──────────────────────────────────────────────────── */
+@keyframes cl-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.cl-fade-up {
+  animation: cl-fade-up 0.3s ease both;
+}
+
+/* --- PR Reviews page entrance animation ----------------------------------- */
+@keyframes pr-entrance {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+.pr-page {
+  animation: pr-entrance 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+.pr-page--d1 {
+  animation: pr-entrance 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: 60ms;
+}
+.pr-page--d2 {
+  animation: pr-entrance 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: 130ms;
+}
+.pr-page--d3 {
+  animation: pr-entrance 0.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+  animation-delay: 210ms;
+}
+
+/* --- prefers-reduced-motion ----------------------------------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .cl-fade-up,
+  .pr-page,
+  .pr-page--d1,
+  .pr-page--d2,
+  .pr-page--d3 {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
 }

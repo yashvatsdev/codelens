@@ -41,9 +41,9 @@ export function RepositoryRisk({
   }, [repositories, findings]);
 
   return (
-    <div className="flex h-full flex-col rounded-xl border border-white/[0.08] bg-white/[0.025] p-5 shadow-sm">
+    <div className="cl-card flex h-full flex-col p-6">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-white/[0.06] pb-4">
+      <div className="flex items-center justify-between border-b border-zinc-800/80 pb-4">
         <div>
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-semibold text-zinc-100">
@@ -57,7 +57,7 @@ export function RepositoryRisk({
         {onNavigateRepositories && (
           <button
             onClick={onNavigateRepositories}
-            className="flex items-center gap-1 text-xs font-medium text-cyan-400 hover:text-cyan-300 transition"
+            className="flex items-center gap-1 text-xs font-medium text-cyan-300 hover:text-cyan-200 transition"
           >
             View all
             <ArrowRight className="size-3" />
@@ -67,8 +67,8 @@ export function RepositoryRisk({
 
       {rankedRepos.length === 0 ? (
         <div className="my-auto flex flex-col items-center justify-center py-10 text-center">
-          <div className="mb-3 flex size-12 items-center justify-center rounded-xl border border-white/[0.08] bg-black/40">
-            <FolderGit2 className="size-6 text-zinc-500" />
+          <div className="mb-3 flex size-12 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900/50">
+            <FolderGit2 className="size-5 text-zinc-500" />
           </div>
           <h4 className="text-sm font-medium text-zinc-300">
             No repositories connected
@@ -79,7 +79,7 @@ export function RepositoryRisk({
           </p>
         </div>
       ) : (
-        <div className="mt-4 flex flex-col gap-3">
+        <div className="mt-4 flex flex-col gap-1">
           {rankedRepos.map(({ repo, health, findingsCount, errorCount }) => {
             const colors = getHealthColor(health.label);
 
@@ -101,14 +101,14 @@ export function RepositoryRisk({
             }
 
             return (
-              <div key={repo.id} className="space-y-1.5">
+              <div key={repo.id} className="group space-y-1.5 p-2 -mx-2 rounded-lg hover:bg-zinc-800/30 transition">
                 <div className="flex items-center justify-between gap-2 text-xs">
                   {/* Left: name + branch */}
                   <div className="flex min-w-0 items-center gap-2 pr-2">
-                    <span className="truncate font-mono text-zinc-200 max-w-[140px] sm:max-w-[200px]">
+                    <span className="truncate font-mono text-zinc-200 group-hover:text-cyan-300 transition-colors max-w-[140px] sm:max-w-[200px]">
                       {repo.name}
                     </span>
-                    <span className="shrink-0 rounded bg-white/[0.05] px-1.5 py-0.5 font-mono text-[10px] text-zinc-500">
+                    <span className="shrink-0 rounded bg-zinc-800/80 px-1.5 py-0.5 font-mono text-[10px] text-zinc-500 font-medium">
                       {repo.default_branch}
                     </span>
                   </div>
@@ -139,7 +139,7 @@ export function RepositoryRisk({
                 </div>
 
                 {/* Health bar */}
-                <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/[0.06]">
+                <div className="h-1.5 w-full overflow-hidden rounded-full bg-zinc-800/50">
                   <div
                     className={`h-full ${barColor} rounded-full transition-all duration-500`}
                     style={{ width: `${Math.max(4, health.score)}%` }}

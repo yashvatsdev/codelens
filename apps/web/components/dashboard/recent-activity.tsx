@@ -107,13 +107,13 @@ export function RecentActivity({
   }, [repositories, findings, sessionActivities]);
 
   return (
-    <div className="rounded-xl border border-white/[0.08] bg-white/[0.025] p-5 shadow-sm">
-      <div className="flex items-center justify-between border-b border-white/[0.06] pb-4">
+    <div className="cl-card flex h-full flex-col p-6">
+      <div className="flex items-center justify-between border-b border-zinc-800/80 pb-4">
         <div>
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-semibold text-zinc-100">Recent Activity</h3>
             {activities.length > 0 && (
-              <span className="rounded bg-white/[0.06] px-1.5 py-0.5 font-mono text-[10px] text-zinc-400">
+              <span className="rounded bg-zinc-800 px-1.5 py-0.5 font-mono text-[10px] text-zinc-400">
                 {activities.length} {activities.length === 1 ? "Event" : "Events"}
               </span>
             )}
@@ -127,7 +127,7 @@ export function RecentActivity({
       {activities.length === 0 ? (
         // Clean empty state strictly matching prompt specification
         <div className="flex flex-col items-center justify-center py-10 text-center">
-          <div className="mb-3 flex size-12 items-center justify-center rounded-xl border border-white/[0.08] bg-black/40">
+          <div className="mb-3 flex size-12 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900/50">
             <Activity className="size-5 text-zinc-500" />
           </div>
           <h4 className="text-sm font-medium text-zinc-300">No recent activity</h4>
@@ -136,7 +136,7 @@ export function RecentActivity({
           </p>
         </div>
       ) : (
-        <div className="mt-4 divide-y divide-white/[0.04]">
+        <div className="mt-4 divide-y divide-zinc-800/80">
           {activities.slice(0, 8).map((activity) => {
             let Icon = Activity;
             let iconColor = "text-cyan-400 bg-cyan-400/10 border-cyan-400/20";
@@ -189,3 +189,7 @@ export function RecentActivity({
     </div>
   );
 }
+
+
+
+

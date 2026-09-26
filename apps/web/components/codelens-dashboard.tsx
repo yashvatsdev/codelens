@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -483,7 +483,7 @@ export function CodeLensDashboard() {
             }, 5000);
           }
         } catch {
-          // transient fetch error — keep polling
+          // transient fetch error Ã¢â‚¬â€ keep polling
         }
       }, 1200);
     } catch (err) {
@@ -678,11 +678,11 @@ export function CodeLensDashboard() {
     <div className="min-h-screen bg-[#090a0b] text-zinc-100 selection:bg-cyan-300/30">
       {/* Sidebar Navigation */}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-60 flex-col border-r border-white/[0.07] bg-[#0c0d0f] transition-transform lg:translate-x-0 ${
+        className={`fixed inset-y-0 left-0 z-40 flex w-60 flex-col border-r border-zinc-800/80 bg-zinc-950 transition-transform lg:translate-x-0 ${
           mobileOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        <div className="flex h-16 items-center gap-3 border-b border-white/[0.07] px-5">
+        <div className="flex h-16 items-center gap-3 border-b border-zinc-800/80 px-5">
           <div className="flex size-7 items-center justify-center rounded-lg bg-cyan-300 text-black">
             <Code2 className="size-4" />
           </div>
@@ -699,7 +699,7 @@ export function CodeLensDashboard() {
         </div>
         <div className="flex flex-1 flex-col gap-7 px-3 py-5">
           <div>
-            <p className="px-3 pb-2 text-[10px] font-medium uppercase tracking-[0.18em] text-zinc-600">
+            <p className="cl-mono-label px-3 pb-2">
               Workspace
             </p>
             <nav className="flex flex-col gap-1">
@@ -709,14 +709,14 @@ export function CodeLensDashboard() {
                   onClick={() => go(label as Section)}
                   className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition ${
                     active === label
-                      ? "bg-white/[0.09] text-white"
-                      : "text-zinc-500 hover:bg-white/[0.04] hover:text-zinc-200"
+                      ? "bg-zinc-800/80 text-zinc-100 shadow-sm"
+                      : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
                   }`}
                 >
                   <Icon className="size-4" />
-                  {label}
+                  <span className="font-medium">{label}</span>
                   {label === "Findings" && allFindings.length > 0 && (
-                    <span className="ml-auto rounded bg-red-400/10 px-1.5 py-0.5 text-[10px] text-red-300">
+                    <span className="ml-auto rounded bg-red-400/10 border border-red-500/20 px-1.5 py-0.5 text-[10px] font-medium text-red-300">
                       {allFindings.length}
                     </span>
                   )}
@@ -725,45 +725,45 @@ export function CodeLensDashboard() {
             </nav>
           </div>
           <div>
-            <p className="px-3 pb-2 text-[10px] font-medium uppercase tracking-[0.18em] text-zinc-600">
+            <p className="cl-mono-label px-3 pb-2">
               Manage
             </p>
             <button
               onClick={() => go("Settings")}
-              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm ${
+              className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm transition ${
                 active === "Settings"
-                  ? "bg-white/[0.09] text-white"
-                  : "text-zinc-500 hover:bg-white/[0.04] hover:text-zinc-200"
+                  ? "bg-zinc-800/80 text-zinc-100 shadow-sm"
+                  : "text-zinc-400 hover:bg-zinc-900 hover:text-zinc-200"
               }`}
             >
               <Settings2 className="size-4" />
-              Settings
+              <span className="font-medium">Settings</span>
             </button>
           </div>
         </div>
         <div
-          className="relative border-t border-white/[0.07] p-3"
+          className="relative border-t border-zinc-800/80 p-3"
           ref={accountMenuRef}
         >
           {accountMenuOpen && (
-            <div className="absolute bottom-full left-3 z-50 mb-2 w-[calc(100%-24px)] overflow-hidden rounded-lg border border-white/[0.07] bg-[#121417] shadow-xl">
+            <div className="absolute bottom-full left-3 z-50 mb-2 w-[calc(100%-24px)] overflow-hidden rounded-lg border border-zinc-800 bg-zinc-900 shadow-xl cl-fade-up" style={{ animationDuration: "200ms" }}>
               <button
                 onClick={() => {
                   setAccountMenuOpen(false);
                   setActive("Settings");
                 }}
-                className="flex w-full items-center gap-2 px-3 py-2.5 text-sm text-zinc-300 hover:bg-white/[0.04] hover:text-white"
+                className="flex w-full items-center gap-2 px-3 py-2.5 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100 transition"
               >
                 <Settings2 className="size-4" />
                 Settings
               </button>
-              <div className="h-px bg-white/[0.07]" />
+              <div className="h-px bg-zinc-800" />
               <button
                 onClick={() => {
                   setAccountMenuOpen(false);
                   logout();
                 }}
-                className="flex w-full items-center gap-2 px-3 py-2.5 text-sm text-red-400 hover:bg-red-400/10"
+                className="flex w-full items-center gap-2 px-3 py-2.5 text-sm text-red-400 hover:bg-red-950/50 transition"
               >
                 <LogOut className="size-4" />
                 Log out
@@ -772,7 +772,7 @@ export function CodeLensDashboard() {
           )}
           <button
             onClick={() => setAccountMenuOpen(!accountMenuOpen)}
-            className="flex w-full items-center gap-3 rounded-lg bg-white/[0.035] p-3 text-left transition-colors hover:bg-white/[0.07]"
+            className="flex w-full items-center gap-3 rounded-lg bg-zinc-900/50 p-3 text-left transition hover:bg-zinc-800/70"
           >
             <div className="flex size-8 shrink-0 items-center justify-center rounded-full bg-cyan-950 text-xs font-medium text-cyan-400 ring-1 ring-cyan-400/30">
               {user?.name
@@ -959,7 +959,7 @@ export function CodeLensDashboard() {
             </div>
           )}
 
-          {/* Scan Progress Overlay — one card per active scan */}
+          {/* Scan Progress Overlay Ã¢â‚¬â€ one card per active scan */}
           {Object.entries(activeScans).length > 0 && (
             <div className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 w-full max-w-sm px-4 pointer-events-none">
               {Object.entries(activeScans).map(([repoIdStr, scan]) => {
@@ -1634,7 +1634,7 @@ export function CodeLensDashboard() {
                                     `fix: resolve ${selectedFinding?.rule_id || "issue"} in ${selectedFinding?.file_path || "file"}`,
                                   );
                                   setPrBodyInput(
-                                    `## 🔍 CodeLens AI Proposed Fix\n\nThis Pull Request proposes an automated code fix for finding **\`${selectedFinding?.rule_id || ""}\`**.\n\n- **File:** \`${selectedFinding?.file_path || "unknown"}\`\n- **Severity:** \`${selectedFinding?.severity?.toUpperCase() || ""}\`\n- **Issue:** ${selectedFinding?.message || ""}\n- **Branch:** \`${gitHubApplyResult.branch_name}\`\n\n---\n*Created automatically by CodeLens*`,
+                                    `## Ã°Å¸â€Â CodeLens AI Proposed Fix\n\nThis Pull Request proposes an automated code fix for finding **\`${selectedFinding?.rule_id || ""}\`**.\n\n- **File:** \`${selectedFinding?.file_path || "unknown"}\`\n- **Severity:** \`${selectedFinding?.severity?.toUpperCase() || ""}\`\n- **Issue:** ${selectedFinding?.message || ""}\n- **Branch:** \`${gitHubApplyResult.branch_name}\`\n\n---\n*Created automatically by CodeLens*`,
                                   );
                                   setCreatePRError(null);
                                 }}
@@ -1993,19 +1993,19 @@ function PageHeading({
   action?: React.ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
+    <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between cl-fade-up">
       <div>
-        <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-cyan-300/70">
+        <p className="cl-mono-label mb-1.5">
           {eyebrow}
         </p>
-        <h2 className="mt-2 text-2xl font-semibold tracking-tight text-zinc-100 sm:text-3xl">
+        <h2 className="text-2xl font-semibold tracking-tight text-zinc-100 sm:text-3xl">
           {title}
         </h2>
-        <p className="mt-2 max-w-xl text-sm leading-6 text-zinc-500">
+        <p className="mt-2 max-w-xl text-sm leading-relaxed text-zinc-400">
           {description}
         </p>
       </div>
-      {action}
+      {action && <div className="shrink-0">{action}</div>}
     </div>
   );
 }
@@ -2184,7 +2184,7 @@ function RepositoryHealthCard({
               <span
                 className={`font-mono text-2xl font-bold tracking-tight ${colors.text}`}
               >
-                {notAnalyzed ? "–" : health.score}
+                {notAnalyzed ? "Ã¢â‚¬â€œ" : health.score}
               </span>
               <span className="font-mono text-[10px] text-zinc-500">
                 {notAnalyzed ? "N/A" : "/ 100"}
@@ -2208,17 +2208,17 @@ function RepositoryHealthCard({
             <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[10px] font-mono text-zinc-500">
               {health.deductions.errors > 0 && (
                 <span className="text-red-400">
-                  −{health.deductions.errors} errors
+                  Ã¢Ë†â€™{health.deductions.errors} errors
                 </span>
               )}
               {health.deductions.warnings > 0 && (
                 <span className="text-amber-400">
-                  −{health.deductions.warnings} warn
+                  Ã¢Ë†â€™{health.deductions.warnings} warn
                 </span>
               )}
               {health.deductions.info > 0 && (
                 <span className="text-cyan-400">
-                  −{health.deductions.info} info
+                  Ã¢Ë†â€™{health.deductions.info} info
                 </span>
               )}
               {health.totalFindings === 0 && (
@@ -2253,7 +2253,7 @@ function RepositoryHealthCard({
             <div className="mt-1 font-mono text-xl font-bold text-red-400">
               {health.errorCount}
             </div>
-            <p className="text-[10px] text-red-400/80 mt-0.5">−15 pts each</p>
+            <p className="text-[10px] text-red-400/80 mt-0.5">Ã¢Ë†â€™15 pts each</p>
           </div>
 
           <div className="rounded-lg border border-amber-500/20 bg-amber-950/10 p-3">
@@ -2266,7 +2266,7 @@ function RepositoryHealthCard({
             <div className="mt-1 font-mono text-xl font-bold text-amber-400">
               {health.warningCount}
             </div>
-            <p className="text-[10px] text-amber-400/80 mt-0.5">−5 pts each</p>
+            <p className="text-[10px] text-amber-400/80 mt-0.5">Ã¢Ë†â€™5 pts each</p>
           </div>
 
           <div className="rounded-lg border border-cyan-500/20 bg-cyan-950/10 p-3">
@@ -2279,7 +2279,7 @@ function RepositoryHealthCard({
             <div className="mt-1 font-mono text-xl font-bold text-cyan-400">
               {health.infoCount}
             </div>
-            <p className="text-[10px] text-cyan-400/80 mt-0.5">−1 pt each</p>
+            <p className="text-[10px] text-cyan-400/80 mt-0.5">Ã¢Ë†â€™1 pt each</p>
           </div>
         </div>
 
@@ -2294,7 +2294,7 @@ function RepositoryHealthCard({
               onClick={onNavigateFindings}
               className="text-[11px] text-cyan-400 hover:text-cyan-300 transition"
             >
-              Explore →
+              Explore Ã¢â€ â€™
             </button>
           </div>
 
@@ -2345,11 +2345,11 @@ function RepositoryHealthCard({
         <div className="flex items-center gap-1.5">
           <span className="inline-block size-1 rounded-full bg-cyan-400" />
           <span>
-            Scoring Formula: Base 100 − (Errors × 15) − (Warnings × 5) − (Info ×
+            Scoring Formula: Base 100 Ã¢Ë†â€™ (Errors Ãƒ— 15) Ã¢Ë†â€™ (Warnings Ãƒ— 5) Ã¢Ë†â€™ (Info Ãƒ—
             1), clamped [0, 100]
           </span>
         </div>
-        <div className="text-zinc-600">Deterministic · No AI inference</div>
+        <div className="text-zinc-600">Deterministic Ã‚Â· No AI inference</div>
       </div>
     </section>
   );
@@ -2400,25 +2400,18 @@ function DashboardContent({
 
   return (
     <div className="flex flex-col gap-6">
-      {/* ── Row 0: Header ───────────────────────────────────────────── */}
+      {/* --- Row 0: Header --- */}
       <PageHeading
         eyebrow="Overview"
         title={`${greeting} 👋`}
         description="Here's the current state of your codebases."
         action={
           <div className="flex items-center gap-3">
-            <Button
-              onClick={onAdd}
-              variant="outline"
-              className="border-white/10 text-white hover:bg-white/5"
-            >
-              <Plus className="size-4 mr-1.5" />
+            <Button onClick={onAdd} variant="outline" size="sm">
+              <Plus className="size-3.5 mr-1.5" />
               Add repository
             </Button>
-            <Button
-              onClick={() => setScanModalOpen(true)}
-              className="bg-cyan-300 text-black hover:bg-cyan-200 font-medium text-xs sm:text-sm px-4 shadow-lg shadow-cyan-950/40 cursor-pointer"
-            >
+            <Button onClick={() => setScanModalOpen(true)} variant="default" size="sm">
               <RefreshCw className="size-3.5 mr-1.5" />
               Scan Repository
             </Button>
@@ -2426,7 +2419,7 @@ function DashboardContent({
         }
       />
 
-      {/* ── Row 1: 4 Top Metric Cards ───────────────────────────────── */}
+      {/* --- Row 1: 4 Top Metric Cards --- */}
       <OverviewMetrics
         repositories={repositories}
         findings={findings}
@@ -2435,7 +2428,7 @@ function DashboardContent({
         infoCount={infoCount}
       />
 
-      {/* ── Row 2: Findings Trend (left 3/5) + Findings by Severity (right 2/5) */}
+      {/* --- Row 2: Findings Trend --- */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
         <div className="lg:col-span-3 min-h-[260px]">
           <FindingsTrend />
@@ -2450,7 +2443,7 @@ function DashboardContent({
         </div>
       </div>
 
-      {/* ── Row 3: Repository Risk (left 3/5) + Health Distribution (right 2/5) */}
+      {/* --- Row 3: Repository Risk --- */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-5">
         <div className="lg:col-span-3 min-h-[260px]">
           <RepositoryRisk
@@ -2467,7 +2460,7 @@ function DashboardContent({
         </div>
       </div>
 
-      {/* ── Row 4: Recent Activity (full width) ────────────────────── */}
+      {/* --- Row 4: Recent Activity --- */}
       <RecentActivity
         repositories={repositories}
         findings={findings}
@@ -2949,7 +2942,7 @@ function FindingsContent({
               >
                 Expand all
               </button>
-              <span>·</span>
+              <span>Ã‚Â·</span>
               <button
                 type="button"
                 onClick={collapseAll}
@@ -3205,7 +3198,7 @@ function AnalysisContent({
                   {repo.full_name}
                 </h3>
                 <p className="mt-1 text-xs text-zinc-500">
-                  {repo.filesCount || 0} stored files ·{" "}
+                  {repo.filesCount || 0} stored files •{" "}
                   {repo.findingsCount || 0} findings recorded
                 </p>
               </div>
@@ -3298,3 +3291,4 @@ function SettingsContent({
 }
 
 export default CodeLensDashboard;
+

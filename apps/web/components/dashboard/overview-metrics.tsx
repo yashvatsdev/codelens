@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useMemo } from "react";
 import {
@@ -73,9 +73,9 @@ export function OverviewMetrics({
   return (
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
       {/* 1. Workspace Health Metric */}
-      <div className="rounded-xl border border-white/[0.08] bg-white/[0.025] p-5 shadow-sm hover:border-white/[0.12] transition">
+      <div className="cl-card flex flex-col p-6 group hover:border-zinc-700/80 transition-colors duration-300">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-medium text-zinc-400 uppercase tracking-wider font-mono">
+          <span className="cl-mono-label">
             Workspace Health
           </span>
           <span
@@ -104,7 +104,7 @@ export function OverviewMetrics({
               colors ? colors.text : "text-zinc-500"
             }`}
           >
-            {workspaceHealth ? workspaceHealth.score : "–"}
+            {workspaceHealth ? workspaceHealth.score : "-"}
           </span>
           <span className="text-xs font-mono text-zinc-500">
             {workspaceHealth ? "/ 100" : ""}
@@ -120,9 +120,9 @@ export function OverviewMetrics({
       </div>
 
       {/* 2. Total Findings Metric */}
-      <div className="rounded-xl border border-white/[0.08] bg-white/[0.025] p-5 shadow-sm hover:border-white/[0.12] transition">
+      <div className="cl-card flex flex-col p-6 group hover:border-zinc-700/80 transition-colors duration-300">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-medium text-zinc-400 uppercase tracking-wider font-mono">
+          <span className="cl-mono-label">
             Total Findings
           </span>
           <ShieldCheck className="size-4 text-cyan-400" />
@@ -141,7 +141,7 @@ export function OverviewMetrics({
             </span>
           ) : (
             <span className="text-zinc-400">
-              {warningCount} {warningCount === 1 ? "warning" : "warnings"} ·{" "}
+              {warningCount} {warningCount === 1 ? "warning" : "warnings"} •{" "}
               {infoCount} info
             </span>
           )}
@@ -149,9 +149,9 @@ export function OverviewMetrics({
       </div>
 
       {/* 3. Repositories Metric */}
-      <div className="rounded-xl border border-white/[0.08] bg-white/[0.025] p-5 shadow-sm hover:border-white/[0.12] transition">
+      <div className="cl-card flex flex-col p-6 group hover:border-zinc-700/80 transition-colors duration-300">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-medium text-zinc-400 uppercase tracking-wider font-mono">
+          <span className="cl-mono-label">
             Repositories
           </span>
           <FolderGit2 className="size-4 text-cyan-400" />
@@ -169,9 +169,9 @@ export function OverviewMetrics({
       </div>
 
       {/* 4. Real Codebase Metric: Monitored Source Files */}
-      <div className="rounded-xl border border-white/[0.08] bg-white/[0.025] p-5 shadow-sm hover:border-white/[0.12] transition">
+      <div className="cl-card flex flex-col p-6 group hover:border-zinc-700/80 transition-colors duration-300">
         <div className="flex items-center justify-between">
-          <span className="text-xs font-medium text-zinc-400 uppercase tracking-wider font-mono">
+          <span className="cl-mono-label">
             Source Files
           </span>
           <FileCode2 className="size-4 text-cyan-400" />
@@ -191,3 +191,6 @@ export function OverviewMetrics({
     </div>
   );
 }
+
+
+

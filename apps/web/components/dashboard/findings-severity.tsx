@@ -39,9 +39,9 @@ export function FindingsSeverity({
   );
 
   return (
-    <div className="flex h-full flex-col rounded-xl border border-white/[0.08] bg-white/[0.025] p-5 shadow-sm">
+    <div className="cl-card flex h-full flex-col p-6">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-white/[0.06] pb-4">
+      <div className="flex items-center justify-between border-b border-zinc-800/80 pb-4">
         <div>
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-semibold text-zinc-100">
@@ -57,7 +57,7 @@ export function FindingsSeverity({
       {total === 0 ? (
         /* Empty state */
         <div className="my-auto flex flex-col items-center justify-center py-10 text-center">
-          <div className="mb-3 flex size-12 items-center justify-center rounded-xl border border-white/[0.08] bg-black/40">
+          <div className="mb-3 flex size-12 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900/50">
             <PieChart className="size-5 text-zinc-500" />
           </div>
           <h4 className="text-sm font-medium text-zinc-300">No findings yet</h4>
@@ -67,13 +67,13 @@ export function FindingsSeverity({
         </div>
       ) : (
         /* Chart + Legend */
-        <div className="mt-5 flex flex-col items-center gap-6 sm:flex-row sm:items-center sm:justify-center">
+        <div className="mt-6 flex flex-col items-center gap-8 sm:flex-row sm:items-center sm:justify-center">
           <DonutChart
             segments={segments}
             totalValue={total}
-            totalLabel="Total Findings"
-            size={152}
-            strokeWidth={22}
+            totalLabel="Findings"
+            size={160}
+            strokeWidth={24}
           />
 
           {/* Legend */}
@@ -85,16 +85,16 @@ export function FindingsSeverity({
               >
                 <div className="flex items-center gap-2">
                   <span
-                    className="size-2.5 shrink-0 rounded-full"
+                    className="size-2 shrink-0 rounded-full"
                     style={{ backgroundColor: item.color }}
                   />
-                  <span className="text-xs text-zinc-300">{item.label}</span>
+                  <span className="text-xs text-zinc-400">{item.label}</span>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <span className="font-mono text-sm font-semibold text-zinc-100">
                     {item.value}
                   </span>
-                  <span className="font-mono text-xs text-zinc-500 w-8 text-right">
+                  <span className="font-mono text-[10px] text-zinc-500 w-8 text-right">
                     {item.pct}%
                   </span>
                 </div>

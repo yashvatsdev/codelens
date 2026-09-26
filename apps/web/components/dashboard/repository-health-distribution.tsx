@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useMemo } from "react";
 import { BarChart2 } from "lucide-react";
@@ -17,10 +17,10 @@ interface RepositoryHealthDistributionProps {
 }
 
 const CATEGORIES = [
-  { label: "Excellent", range: "90–100", color: "#34d399", min: 90, max: 100 },
-  { label: "Good", range: "75–89", color: "#22d3ee", min: 75, max: 89 },
-  { label: "Fair", range: "50–74", color: "#fbbf24", min: 50, max: 74 },
-  { label: "Poor", range: "0–49", color: "#f43f5e", min: 0, max: 49 },
+  { label: "Excellent", range: "90-100", color: "#34d399", min: 90, max: 100 },
+  { label: "Good", range: "75-89", color: "#22d3ee", min: 75, max: 89 },
+  { label: "Fair", range: "50-74", color: "#fbbf24", min: 50, max: 74 },
+  { label: "Poor", range: "0-49", color: "#f43f5e", min: 0, max: 49 },
 ] as const;
 
 export function RepositoryHealthDistribution({
@@ -56,9 +56,9 @@ export function RepositoryHealthDistribution({
   );
 
   return (
-    <div className="flex h-full flex-col rounded-xl border border-white/[0.08] bg-white/[0.025] p-5 shadow-sm">
+    <div className="cl-card flex h-full flex-col p-6">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-white/[0.06] pb-4">
+      <div className="flex items-center justify-between border-b border-zinc-800/80 pb-4">
         <div>
           <div className="flex items-center gap-2">
             <h3 className="text-sm font-semibold text-zinc-100">
@@ -74,7 +74,7 @@ export function RepositoryHealthDistribution({
       {total === 0 ? (
         /* Empty state */
         <div className="my-auto flex flex-col items-center justify-center py-10 text-center">
-          <div className="mb-3 flex size-12 items-center justify-center rounded-xl border border-white/[0.08] bg-black/40">
+          <div className="mb-3 flex size-12 items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900/50">
             <BarChart2 className="size-5 text-zinc-500" />
           </div>
           <h4 className="text-sm font-medium text-zinc-300">
@@ -86,7 +86,7 @@ export function RepositoryHealthDistribution({
         </div>
       ) : (
         /* Chart + Legend */
-        <div className="mt-5 flex flex-col items-center gap-6 sm:flex-row sm:items-center sm:justify-center">
+        <div className="mt-6 flex flex-col items-center gap-8 sm:flex-row sm:items-center sm:justify-center">
           <DonutChart
             segments={segments}
             totalValue={total}
@@ -130,3 +130,5 @@ export function RepositoryHealthDistribution({
     </div>
   );
 }
+
+

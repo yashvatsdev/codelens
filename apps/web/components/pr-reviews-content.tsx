@@ -334,7 +334,7 @@ export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
         <div>
-          <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-cyan-300/70">
+          <p className="cl-mono-label">
             Workspace / PR Reviews
           </p>
           <h2 className="mt-2 text-2xl font-semibold tracking-tight text-zinc-100 sm:text-3xl">
@@ -353,7 +353,7 @@ export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
                 setReviewResult(null);
                 setActiveReviewMeta(null);
               }}
-              className="bg-cyan-300 text-black hover:bg-cyan-200"
+              className="cl-btn-primary"
             >
               <Plus className="size-4 mr-2" />
               New Review
@@ -362,7 +362,7 @@ export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
             <Button
               onClick={() => setViewState("history")}
               variant="outline"
-              className="border-white/[0.1] text-zinc-300 hover:bg-white/[0.05]"
+              className="border-zinc-800 hover:bg-zinc-800/50 text-zinc-300"
             >
               <History className="size-4 mr-2" />
               Back to History
@@ -373,7 +373,7 @@ export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
 
       {/* History List */}
       {viewState === "history" && (
-        <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-5 sm:p-6">
+        <div className="cl-card p-5 sm:p-6">
           <h3 className="text-sm font-medium text-zinc-200 mb-4 flex items-center gap-2">
             <History className="size-4 text-cyan-300" />
             <span>Recent Reviews</span>
@@ -383,7 +383,7 @@ export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
               <Loader2 className="size-6 animate-spin text-zinc-500" />
             </div>
           ) : history.length === 0 ? (
-            <div className="text-center p-8 text-zinc-500 text-sm border border-dashed border-white/[0.1] rounded-lg">
+            <div className="text-center p-8 text-zinc-500 text-sm border border-dashed border-zinc-800 rounded-lg">
               No recent reviews found. Click "New Review" to start one.
             </div>
           ) : (
@@ -391,7 +391,7 @@ export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
               {history.map((item) => (
                 <div
                   key={item.id}
-                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-lg border border-white/[0.05] bg-black/40 p-4 transition hover:border-white/[0.1]"
+                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-lg border border-zinc-800/60 bg-black/40 p-4 transition hover:border-zinc-800"
                 >
                   <div className="flex flex-col gap-1">
                     <div className="flex items-center gap-2">
@@ -416,7 +416,7 @@ export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
                     size="sm"
                     variant="outline"
                     onClick={() => handleViewReview(item.id)}
-                    className="border-white/[0.1] text-zinc-300 hover:bg-white/[0.05]"
+                    className="border-zinc-800 hover:bg-zinc-800/50 text-zinc-300"
                   >
                     View Review
                   </Button>
@@ -430,7 +430,7 @@ export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
       {viewState !== "history" && (
         <>
           {/* Review Request Form */}
-          <div className="rounded-xl border border-white/[0.08] bg-white/[0.03] p-5 sm:p-6 shadow-[0_12px_40px_-24px_rgba(0,0,0,.8)]">
+          <div className="cl-card p-5 sm:p-6">
             <h3 className="text-sm font-medium text-zinc-200 mb-4 flex items-center gap-2">
               <GitPullRequest className="size-4 text-cyan-300" />
               <span>Review a Pull Request</span>
@@ -454,7 +454,7 @@ export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
                     setReviewError(null);
                   }}
                   disabled={isLoading || repositories.length === 0}
-                  className="w-full rounded-lg border border-white/[0.1] bg-black/40 px-3 py-2 text-sm text-zinc-200 transition focus:border-cyan-300/50 focus:outline-none focus:ring-1 focus:ring-cyan-300/50 disabled:opacity-50"
+                  className="cl-input"
                 >
                   {repositories.length === 0 ? (
                     <option value="">No repositories connected</option>
@@ -463,7 +463,7 @@ export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
                       <option
                         key={repo.id}
                         value={repo.id}
-                        className="bg-[#111315]"
+                        className="bg-zinc-900"
                       >
                         {repo.full_name}
                       </option>
@@ -502,7 +502,7 @@ export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
                         handleRunReview();
                       }
                     }}
-                    className="w-full rounded-lg border border-white/[0.1] bg-black/40 pl-7 pr-3 py-2 text-sm text-zinc-200 transition placeholder:text-zinc-600 focus:border-cyan-300/50 focus:outline-none focus:ring-1 focus:ring-cyan-300/50 disabled:opacity-50"
+                    className="w-full rounded-lg border border-zinc-800 bg-black/40 pl-7 pr-3 py-2 text-sm text-zinc-200 transition placeholder:text-zinc-600 focus:border-cyan-300/50 focus:outline-none focus:ring-1 focus:ring-cyan-300/50 disabled:opacity-50"
                   />
                 </div>
               </div>
@@ -516,7 +516,7 @@ export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
                     repositories.length === 0 ||
                     !prNumberInput.trim()
                   }
-                  className="w-full bg-cyan-300 text-black hover:bg-cyan-200 font-medium disabled:opacity-40 h-[38px]"
+                  className="w-full cl-btn-primary disabled:opacity-40 h-[38px]"
                 >
                   {isLoading ? (
                     <>
@@ -577,7 +577,7 @@ export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
 
           {/* Loading State Overlay / Card */}
           {isLoading && (
-            <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-12 text-center animate-in fade-in duration-200">
+            <div className="cl-card p-12 text-center animate-in fade-in duration-200">
               <div className="inline-flex size-12 items-center justify-center rounded-xl bg-purple-500/10 border border-purple-500/20 mb-4">
                 <Loader2 className="size-6 animate-spin text-purple-400" />
               </div>
@@ -600,7 +600,7 @@ export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
           {!isLoading && reviewResult && activeReviewMeta && (
             <div className="space-y-6 animate-in fade-in duration-200">
               {/* Section A: Header Banner */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 rounded-xl border border-white/[0.08] bg-white/[0.035] p-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 cl-card p-5">
                 <div className="flex items-center gap-3">
                   <div className="flex size-10 items-center justify-center rounded-lg bg-cyan-400/10 border border-cyan-400/20 text-cyan-300">
                     <GitPullRequest className="size-5" />
@@ -627,7 +627,7 @@ export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
                     size="sm"
                     variant="outline"
                     onClick={() => handleRunReview(activeReviewMeta.prNumber)}
-                    className="border-white/[0.1] text-zinc-300 hover:bg-white/[0.05] h-8 text-xs"
+                    className="border-zinc-800 hover:bg-zinc-800/50 text-zinc-300 h-8 text-xs"
                   >
                     <RefreshCw className="size-3.5 mr-1.5" />
                     Re-review
@@ -638,7 +638,7 @@ export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
               {/* Section B: Risk Overview */}
               <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
                 {/* Risk Card */}
-                <div className="md:col-span-4 rounded-xl border border-white/[0.08] bg-white/[0.025] p-5 flex flex-col justify-between">
+                <div className="md:col-span-4 cl-card p-5 flex flex-col justify-between">
                   <div>
                     <span className="text-[10px] font-mono uppercase tracking-[0.18em] text-zinc-500">
                       Risk Level
@@ -647,7 +647,7 @@ export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
                       <RiskBadge riskLevel={reviewResult.risk_level} />
                     </div>
                   </div>
-                  <div className="mt-4 pt-4 border-t border-white/[0.06]">
+                  <div className="mt-4 pt-4 border-t border-zinc-800/60">
                     <div className="text-xs text-zinc-400 leading-relaxed">
                       {reviewResult.summary}
                     </div>
@@ -655,7 +655,7 @@ export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
                 </div>
 
                 {/* Overall Assessment */}
-                <div className="md:col-span-8 rounded-xl border border-white/[0.08] bg-white/[0.025] p-5">
+                <div className="md:col-span-8 cl-card p-5">
                   <span className="text-[10px] font-mono uppercase tracking-[0.18em] text-zinc-500 flex items-center gap-1.5">
                     <Sparkles className="size-3 text-cyan-300" />
                     Overall Assessment
@@ -667,14 +667,14 @@ export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
               </div>
 
               {/* Section C: Key Findings */}
-              <div className="rounded-xl border border-white/[0.08] bg-white/[0.025] p-5 sm:p-6 space-y-4">
+              <div className="cl-card p-5 sm:p-6 space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <ShieldAlert className="size-4 text-purple-400" />
                     <h4 className="text-sm font-semibold text-zinc-200">
                       Key Findings
                     </h4>
-                    <span className="rounded-full bg-white/[0.06] border border-white/[0.08] px-2 py-0.5 text-[11px] font-mono text-zinc-400">
+                    <span className="rounded-full bg-zinc-800/50 border border-zinc-700/50 px-2 py-0.5 text-[11px] font-mono text-zinc-400">
                       {reviewResult.key_findings.length}
                     </span>
                   </div>
@@ -705,15 +705,15 @@ export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
                       return (
                         <div
                           key={`${finding.file_path}-${finding.line_number}-${idx}`}
-                          className="rounded-lg border border-white/[0.08] bg-black/40 p-4 transition hover:border-white/[0.14]"
+                          className="rounded-lg border border-zinc-800/80 bg-zinc-900/40 p-4 transition hover:border-zinc-700"
                         >
                           {/* Header Row: Severity, Category, File location */}
-                          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.05] pb-3 mb-3">
+                          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800/60 pb-3 mb-3">
                             <div className="flex items-center gap-2">
                               <FindingSeverityBadge
                                 severity={finding.severity}
                               />
-                              <span className="rounded bg-white/[0.06] px-2 py-0.5 text-[11px] font-mono text-zinc-400 uppercase tracking-wider">
+                              <span className="rounded bg-zinc-800/50 px-2 py-0.5 text-[11px] font-mono text-zinc-400 uppercase tracking-wider">
                                 {finding.category}
                               </span>
                             </div>
@@ -757,7 +757,7 @@ export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
                                       </span>
                                     )}
                                 </div>
-                                <div className="overflow-x-auto rounded-lg border border-white/[0.08] bg-[#0c0d0f] p-2.5 font-mono text-xs">
+                                <div className="overflow-x-auto rounded-lg border border-zinc-800/80 bg-zinc-950 p-2.5 font-mono text-xs">
                                   <div className="min-w-fit space-y-0.5">
                                     {finding.code_context
                                       .split("\n")
@@ -777,7 +777,7 @@ export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
                                             className={`flex items-start gap-3 px-2 py-0.5 rounded transition ${
                                               isFindingLine
                                                 ? highlight.row
-                                                : "text-zinc-400 hover:bg-white/[0.02]"
+                                                : "text-zinc-400 hover:bg-zinc-900/20"
                                             }`}
                                           >
                                             <span
@@ -809,7 +809,7 @@ export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
 
                             {/* Impact */}
                             {finding.impact && (
-                              <div className="rounded-md bg-white/[0.02] border border-white/[0.04] p-2.5">
+                              <div className="rounded-md bg-zinc-900/20 border border-zinc-800/50 p-2.5">
                                 <div className="text-[10px] font-semibold text-amber-300/90 uppercase tracking-wider flex items-center gap-1">
                                   <AlertTriangle className="size-3" />
                                   Why it matters
@@ -834,7 +834,7 @@ export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
                             )}
 
                             {/* AI Fix Section */}
-                            <div className="pt-2 border-t border-white/[0.06] space-y-3">
+                            <div className="pt-2 border-t border-zinc-800/60 space-y-3">
                               {/* Action Bar when no fix has been generated yet */}
                               {!fix && !isFixing && !fixError && (
                                 <div className="flex items-center justify-between">
@@ -896,7 +896,7 @@ export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
                               {fix && (
                                 <div className="space-y-3 rounded-lg border border-purple-500/20 bg-[#0d0f14] p-3.5 animate-in fade-in duration-200">
                                   {/* Header: AI FIX title & controls */}
-                                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-white/[0.06] pb-2.5">
+                                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-zinc-800/60 pb-2.5">
                                     <div className="flex items-center gap-2">
                                       <span className="inline-flex items-center gap-1.5 rounded-md border border-purple-500/30 bg-purple-500/15 px-2.5 py-1 text-xs font-semibold text-purple-300">
                                         <Sparkles className="size-3 text-purple-400" />
@@ -918,7 +918,7 @@ export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
                                             fix.fixed_code,
                                           )
                                         }
-                                        className="border-white/[0.1] text-zinc-300 hover:bg-white/[0.05] h-7 text-xs gap-1.5"
+                                        className="border-zinc-800 hover:bg-zinc-800/50 text-zinc-300 h-7 text-xs gap-1.5"
                                         title="Copy fixed code snippet to clipboard"
                                       >
                                         {isCopied ? (
@@ -947,7 +947,7 @@ export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
                                           className={`h-7 text-xs gap-1.5 transition-colors ${
                                             isPreviewOpen
                                               ? "border-cyan-400/40 bg-cyan-950/30 text-cyan-300 hover:bg-cyan-950/40"
-                                              : "border-white/[0.1] text-zinc-300 hover:bg-white/[0.05]"
+                                              : "border-zinc-800 hover:bg-zinc-800/50 text-zinc-300"
                                           }`}
                                         >
                                           {isPreviewOpen ? (
@@ -972,7 +972,7 @@ export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
                                         onClick={() =>
                                           handleGenerateFix(finding, findingKey)
                                         }
-                                        className="border-white/[0.1] text-zinc-300 hover:bg-white/[0.05] h-7 text-xs gap-1.5"
+                                        className="border-zinc-800 hover:bg-zinc-800/50 text-zinc-300 h-7 text-xs gap-1.5"
                                         title="Regenerate proposed fix"
                                       >
                                         <RefreshCw
@@ -991,7 +991,7 @@ export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
                                         <span className="inline-block size-1.5 rounded-full bg-rose-500" />
                                         Original Code
                                       </div>
-                                      <pre className="rounded-lg border border-white/[0.08] bg-black/50 p-2.5 font-mono text-xs text-zinc-300 overflow-x-auto max-h-44 whitespace-pre-wrap">
+                                      <pre className="rounded-lg border border-zinc-800/80 bg-zinc-900/50 p-2.5 font-mono text-xs text-zinc-300 overflow-x-auto max-h-44 whitespace-pre-wrap">
                                         <code>
                                           {fix.original_code ||
                                             "(No original snippet)"}
@@ -1012,7 +1012,7 @@ export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
                                           <span>Line removed</span>
                                         </div>
                                       ) : (
-                                        <pre className="rounded-lg border border-white/[0.08] bg-black/50 p-2.5 font-mono text-xs text-zinc-300 overflow-x-auto max-h-44 whitespace-pre-wrap">
+                                        <pre className="rounded-lg border border-zinc-800/80 bg-zinc-900/50 p-2.5 font-mono text-xs text-zinc-300 overflow-x-auto max-h-44 whitespace-pre-wrap">
                                           <code>{fix.fixed_code}</code>
                                         </pre>
                                       )}
@@ -1026,7 +1026,7 @@ export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
                                         <TerminalSquare className="size-3.5 text-zinc-500" />
                                         Unified Diff
                                       </div>
-                                      <div className="rounded-lg border border-white/[0.08] bg-black/60 p-2.5 font-mono text-xs overflow-x-auto max-h-52">
+                                      <div className="rounded-lg border border-zinc-800/80 bg-black/40 p-2.5 font-mono text-xs overflow-x-auto max-h-52">
                                         {fix.diff
                                           .split("\n")
                                           .map((line, lIdx) => {
@@ -1093,7 +1093,7 @@ export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
                                         applied. No changes were committed to
                                         GitHub or the repository.
                                       </p>
-                                      <pre className="rounded-lg border border-white/[0.08] bg-black/60 p-3 font-mono text-xs text-zinc-300 overflow-x-auto max-h-60 whitespace-pre-wrap">
+                                      <pre className="rounded-lg border border-zinc-800/80 bg-black/40 p-3 font-mono text-xs text-zinc-300 overflow-x-auto max-h-60 whitespace-pre-wrap">
                                         <code>{fix.resulting_code}</code>
                                       </pre>
                                     </div>
@@ -1112,7 +1112,7 @@ export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
               {/* Section D: Recommendations */}
               {reviewResult.recommendations &&
                 reviewResult.recommendations.length > 0 && (
-                  <div className="rounded-xl border border-white/[0.08] bg-white/[0.025] p-5 sm:p-6">
+                  <div className="cl-card p-5 sm:p-6">
                     <div className="flex items-center gap-2 mb-4">
                       <Lightbulb className="size-4 text-amber-300" />
                       <h4 className="text-sm font-semibold text-zinc-200">
@@ -1124,7 +1124,7 @@ export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
                       {reviewResult.recommendations.map((rec, i) => (
                         <li
                           key={i}
-                          className="flex items-start gap-3 rounded-lg border border-white/[0.05] bg-white/[0.02] p-3 text-xs text-zinc-300"
+                          className="flex items-start gap-3 rounded-lg border border-zinc-800/60 bg-zinc-900/20 p-3 text-xs text-zinc-300"
                         >
                           <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-cyan-300/10 border border-cyan-300/20 text-[10px] font-mono font-semibold text-cyan-300 mt-0.5">
                             {i + 1}
@@ -1140,7 +1140,7 @@ export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
 
           {/* Initial Empty State before any review */}
           {viewState === "form" && !isLoading && !reviewResult && (
-            <div className="rounded-xl border border-dashed border-white/[0.1] bg-white/[0.015] p-10 text-center">
+            <div className="rounded-xl border border-dashed border-zinc-800 bg-zinc-950/30 p-10 text-center">
               <div className="mx-auto flex size-12 items-center justify-center rounded-xl bg-cyan-300/10 border border-cyan-300/20 text-cyan-300 mb-4">
                 <GitPullRequest className="size-6" />
               </div>
@@ -1155,7 +1155,7 @@ export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
               </p>
 
               <div className="mt-8 grid grid-cols-1 sm:grid-cols-3 gap-4 max-w-2xl mx-auto text-left">
-                <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-4">
+                <div className="rounded-lg border border-zinc-800/60 bg-zinc-900/20 p-4">
                   <span className="text-[10px] font-mono text-cyan-300">
                     01
                   </span>
@@ -1167,7 +1167,7 @@ export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
                     request.
                   </p>
                 </div>
-                <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-4">
+                <div className="rounded-lg border border-zinc-800/60 bg-zinc-900/20 p-4">
                   <span className="text-[10px] font-mono text-cyan-300">
                     02
                   </span>
@@ -1179,7 +1179,7 @@ export function PRReviewsContent({ repositories }: PRReviewsContentProps) {
                     TypeScript.
                   </p>
                 </div>
-                <div className="rounded-lg border border-white/[0.06] bg-white/[0.02] p-4">
+                <div className="rounded-lg border border-zinc-800/60 bg-zinc-900/20 p-4">
                   <span className="text-[10px] font-mono text-cyan-300">
                     03
                   </span>
