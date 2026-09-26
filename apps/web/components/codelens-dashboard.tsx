@@ -1040,7 +1040,7 @@ export function CodeLensDashboard() {
       {/* Add Repository Modal */}
       {showAdd && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
-          <div className="w-full max-w-md rounded-xl border border-white/[0.1] bg-[#111315] p-6 shadow-2xl">
+          <div className="w-full max-w-md cl-card p-6 shadow-2xl">
             <div className="flex items-start justify-between">
               <div>
                 <h2 className="font-medium text-zinc-100">Add repository</h2>
@@ -1068,7 +1068,7 @@ export function CodeLensDashboard() {
                 onChange={(e) => setRepoUrl(e.target.value)}
                 placeholder="https://github.com/owner/repository"
                 disabled={isAddingRepo}
-                className="mt-2 w-full rounded-lg border border-white/[0.1] bg-black/20 px-3 py-2.5 text-sm outline-none placeholder:text-zinc-700 focus:border-cyan-300/60"
+                className="mt-2 cl-input"
               />
               {addRepoError && (
                 <p className="mt-2 text-xs text-red-400 flex items-center gap-1.5">
@@ -1091,7 +1091,7 @@ export function CodeLensDashboard() {
                 <Button
                   type="submit"
                   disabled={!repoUrl.trim() || isAddingRepo}
-                  className="bg-cyan-300 text-black hover:bg-cyan-200"
+                  className="cl-btn-primary w-auto"
                 >
                   {isAddingRepo ? (
                     <>
@@ -1120,7 +1120,7 @@ export function CodeLensDashboard() {
           }}
         >
           <div
-            className="w-full max-w-md rounded-xl border border-red-500/20 bg-[#111315] p-6 shadow-2xl"
+            className="w-full max-w-md cl-card !border-red-500/20 p-6 shadow-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-start justify-between">
@@ -1211,17 +1211,17 @@ export function CodeLensDashboard() {
           onClick={handleCloseFindingModal}
         >
           <div
-            className="w-full max-w-2xl max-h-[90vh] flex flex-col rounded-xl border border-white/[0.1] bg-[#111315] shadow-2xl overflow-hidden"
+            className="w-full max-w-2xl max-h-[90vh] flex flex-col cl-card shadow-2xl overflow-hidden pr-page--d1"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Modal Header */}
-            <div className="flex items-center justify-between p-6 border-b border-white/[0.08]">
+            <div className="flex items-center justify-between p-6 border-b border-zinc-800/60">
               <div className="flex items-center gap-2">
                 <SeverityBadge severity={selectedFinding.severity} />
-                <span className="rounded bg-white/[0.06] px-2 py-0.5 font-mono text-[11px] text-zinc-400">
+                <span className="rounded bg-zinc-800 px-2 py-0.5 font-mono text-[11px] text-zinc-300">
                   {selectedFinding.rule_id}
                 </span>
-                <span className="rounded bg-white/[0.04] px-2 py-0.5 text-[11px] text-zinc-500">
+                <span className="rounded bg-zinc-900 px-2 py-0.5 text-[11px] text-zinc-400 border border-zinc-800">
                   {selectedFinding.category}
                 </span>
               </div>
@@ -1240,7 +1240,7 @@ export function CodeLensDashboard() {
                 {selectedFinding.message}
               </h2>
 
-              <div className="rounded-lg border border-white/[0.07] bg-black/30 p-3 font-mono text-xs text-zinc-300">
+              <div className="rounded-lg border border-zinc-800/60 bg-zinc-950 p-3 font-mono text-xs text-zinc-300">
                 <span className="text-zinc-500">File: </span>
                 {selectedFinding.file_path || "Repository-level"}
                 {selectedFinding.line_number && (
@@ -1274,7 +1274,7 @@ export function CodeLensDashboard() {
 
               {/* Generating Test loading indicator */}
               {isGeneratingTest && !testResult && (
-                <div className="rounded-lg border border-white/[0.06] bg-black/30 p-4 flex items-center gap-3 text-xs text-zinc-400 animate-in fade-in duration-150">
+                <div className="rounded-lg border border-zinc-800 bg-zinc-900/50 p-4 flex items-center gap-3 text-xs text-zinc-400 animate-in fade-in duration-150">
                   <Loader2 className="size-4 animate-spin text-purple-400" />
                   <span>Generating targeted unit test with AI...</span>
                 </div>
@@ -1294,7 +1294,7 @@ export function CodeLensDashboard() {
                         <span className="rounded bg-purple-500/20 px-2 py-0.5 text-purple-300 border border-purple-500/30">
                           {testResult.test_framework}
                         </span>
-                        <span className="rounded bg-white/[0.06] px-2 py-0.5 text-zinc-400 border border-white/[0.08]">
+                        <span className="rounded bg-zinc-800 px-2 py-0.5 text-zinc-300 border border-zinc-700">
                           {testResult.test_file}
                         </span>
                       </div>
@@ -1318,7 +1318,7 @@ export function CodeLensDashboard() {
                         onClick={handleCopyTest}
                         size="xs"
                         variant="outline"
-                        className="border-white/[0.1] text-zinc-300 hover:bg-white/[0.05] h-6 text-[11px] font-mono"
+                        className="border-zinc-700 text-zinc-300 hover:bg-zinc-800 h-6 text-[11px] font-mono"
                       >
                         {testCopied ? (
                           <>
@@ -1333,7 +1333,7 @@ export function CodeLensDashboard() {
                         )}
                       </Button>
                     </div>
-                    <pre className="rounded-lg border border-white/[0.08] bg-black/60 p-3 font-mono text-xs text-zinc-300 overflow-x-auto max-h-64 whitespace-pre-wrap">
+                    <pre className="rounded-lg border border-zinc-800/60 bg-zinc-950 p-3 font-mono text-xs text-zinc-300 overflow-x-auto max-h-64 whitespace-pre-wrap">
                       <code>{testResult.test_code}</code>
                     </pre>
                   </div>
@@ -1381,7 +1381,7 @@ export function CodeLensDashboard() {
                         <TerminalSquare className="size-3.5 text-zinc-500" />
                         Unified Diff
                       </div>
-                      <div className="rounded-lg border border-white/[0.08] bg-black/50 p-3 font-mono text-xs overflow-x-auto max-h-60">
+                      <div className="rounded-lg border border-zinc-800/60 bg-zinc-950 p-3 font-mono text-xs overflow-x-auto max-h-60">
                         {fixResult.diff.split("\n").map((line, idx) => {
                           let color = "text-zinc-400";
                           let bg = "";
@@ -1798,7 +1798,7 @@ export function CodeLensDashboard() {
             </div>
 
             {/* Footer Actions */}
-            <div className="flex flex-col gap-3 p-4 px-6 border-t border-white/[0.08] bg-white/[0.02]">
+            <div className="flex flex-col gap-3 p-4 px-6 border-t border-zinc-800/60 bg-zinc-950/50">
               {/* Confirmation state before applying fix */}
               {isConfirmingApply && (
                 <div className="rounded-lg border border-amber-500/30 bg-amber-950/25 p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs animate-in fade-in duration-150">
@@ -1854,7 +1854,7 @@ export function CodeLensDashboard() {
                     disabled={isGeneratingTest}
                     size="sm"
                     variant="outline"
-                    className="border-white/[0.1] text-zinc-300 hover:bg-white/[0.05]"
+                    className="border-zinc-700 text-zinc-300 hover:bg-zinc-800"
                   >
                     {isGeneratingTest ? (
                       <>
@@ -1903,7 +1903,7 @@ export function CodeLensDashboard() {
                     size="sm"
                     className={
                       fixResult
-                        ? "border border-white/[0.1] bg-white/[0.05] text-zinc-300 hover:bg-white/[0.1]"
+                        ? "border border-zinc-700 bg-zinc-800 text-zinc-300 hover:bg-zinc-700/80"
                         : "bg-cyan-300 text-black hover:bg-cyan-200"
                     }
                   >
@@ -2141,7 +2141,7 @@ function RepositoryHealthCard({
                 <option value="all">
                   All Connected Repositories ({findings.length} findings)
                 </option>
-                {repositories.map((repo) => (
+                {repositories.map((repo, i) => (
                   <option key={repo.id} value={repo.id}>
                     {repo.full_name} ({repo.findingsCount || 0} findings)
                   </option>
@@ -2506,7 +2506,7 @@ function RepositoriesContent({
   activeScans: Record<number, ScanStatusResponse>;
 }) {
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-8 pr-page">
       <PageHeading
         eyebrow="Workspace / Repositories"
         title="Repositories"
@@ -2514,7 +2514,7 @@ function RepositoriesContent({
         action={
           <Button
             onClick={onAdd}
-            className="bg-cyan-300 text-black hover:bg-cyan-200"
+            className="cl-btn-primary w-auto"
           >
             <Plus className="size-4 mr-1.5" />
             Add repository
@@ -2523,7 +2523,7 @@ function RepositoriesContent({
       />
 
       {repositories.length === 0 ? (
-        <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-12 text-center">
+        <div className="cl-card p-12 text-center pr-page--d2">
           <FolderGit2 className="mx-auto size-8 text-zinc-600 mb-3" />
           <h3 className="text-base font-medium text-zinc-300">
             No repositories yet
@@ -2534,21 +2534,21 @@ function RepositoriesContent({
           </p>
           <Button
             onClick={onAdd}
-            className="mt-4 bg-cyan-300 text-black hover:bg-cyan-200"
+            className="mt-4 cl-btn-primary w-auto"
           >
             Connect first repository
           </Button>
         </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {repositories.map((repo) => (
+          {repositories.map((repo, i) => (
             <div
               key={repo.id}
-              className="rounded-xl border border-white/[0.08] bg-white/[0.025] p-5 flex flex-col justify-between"
+              className={`cl-card p-5 flex flex-col justify-between hover:border-zinc-700 transition-colors pr-page--d${Math.min((i % 3) + 1, 3)}`}
             >
               <div>
                 <div className="flex items-start justify-between">
-                  <span className="rounded bg-cyan-300/10 border border-cyan-300/20 px-2 py-0.5 font-mono text-[10px] text-cyan-300">
+                  <span className="rounded bg-cyan-950/30 border border-cyan-900/50 px-2 py-0.5 font-mono text-[10px] text-cyan-400">
                     {repo.default_branch}
                   </span>
                   <div className="flex items-center gap-2">
@@ -2592,12 +2592,13 @@ function RepositoriesContent({
                 </div>
               </div>
 
-              <div className="mt-6 flex flex-wrap items-center justify-between border-t border-white/[0.07] pt-4 gap-2">
+              <div className="mt-6 flex flex-wrap items-center justify-between border-t border-zinc-800/60 pt-4 gap-2">
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => onIngest(repo.id, repo.full_name)}
                   disabled={ingestingRepoId === repo.id}
+                  className="border-zinc-800 hover:bg-zinc-800/50 text-zinc-300"
                 >
                   {ingestingRepoId === repo.id ? (
                     <>
@@ -2617,6 +2618,7 @@ function RepositoriesContent({
                     activeScans[repo.id]?.status === "running"
                   }
                   title="Full scan: ingest files then run analysis"
+                  className="border-zinc-800 hover:bg-zinc-800/50 text-zinc-300"
                 >
                   {activeScans[repo.id]?.status === "queued" ||
                   activeScans[repo.id]?.status === "running" ? (
@@ -2635,7 +2637,7 @@ function RepositoriesContent({
                   size="sm"
                   onClick={() => onAnalyze(repo.id, repo.full_name)}
                   disabled={analyzingRepoId === repo.id}
-                  className="bg-cyan-300 text-black hover:bg-cyan-200"
+                  className="cl-btn-primary w-auto"
                 >
                   {analyzingRepoId === repo.id ? (
                     <>
@@ -2801,7 +2803,7 @@ function FindingsContent({
   };
 
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-8 pr-page">
       <PageHeading
         eyebrow="Workspace / Findings"
         title="Findings"
@@ -2809,7 +2811,7 @@ function FindingsContent({
       />
 
       {/* Filters & Control Bar */}
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-3 pr-page--d1">
         <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
           {/* Search input */}
           <div className="relative flex-1">
@@ -2818,13 +2820,13 @@ function FindingsContent({
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Search findings by message, rule, or file path..."
-              className="h-10 w-full rounded-lg border border-white/[0.09] bg-white/[0.025] pl-9 pr-3 text-sm outline-none placeholder:text-zinc-700 focus:border-cyan-300/50"
+              className="h-10 w-full cl-input pl-9"
             />
           </div>
 
           <div className="flex flex-wrap items-center gap-2.5">
             {/* Repository dropdown filter */}
-            <div className="flex items-center gap-1.5 rounded-lg border border-white/[0.09] bg-white/[0.025] px-3 py-2 text-xs">
+            <div className="flex items-center gap-1.5 rounded-lg border border-zinc-800 bg-zinc-900/50 px-3 py-2 text-xs hover:border-zinc-700 transition">
               <FolderGit2 className="size-3.5 text-zinc-400 shrink-0" />
               <select
                 value={selectedRepoFilter}
@@ -2832,7 +2834,7 @@ function FindingsContent({
                 className="bg-transparent text-xs text-zinc-200 outline-none cursor-pointer pr-1"
                 aria-label="Filter by repository"
               >
-                <option value="all" className="bg-[#111315] text-zinc-200">
+                <option value="all" className="bg-zinc-900 text-zinc-200">
                   All Repositories ({findings.length})
                 </option>
                 {repositories.map((repo) => {
@@ -2843,7 +2845,7 @@ function FindingsContent({
                     <option
                       key={repo.id}
                       value={repo.id.toString()}
-                      className="bg-[#111315] text-zinc-200"
+                      className="bg-zinc-900 text-zinc-200"
                     >
                       {repo.name} ({count})
                     </option>
@@ -2854,7 +2856,7 @@ function FindingsContent({
 
             {/* Category dropdown filter */}
             {availableCategories.length > 0 && (
-              <div className="flex items-center gap-1.5 rounded-lg border border-white/[0.09] bg-white/[0.025] px-3 py-2 text-xs">
+              <div className="flex items-center gap-1.5 rounded-lg border border-zinc-800 bg-zinc-900/50 px-3 py-2 text-xs hover:border-zinc-700 transition">
                 <Filter className="size-3.5 text-zinc-400 shrink-0" />
                 <select
                   value={categoryFilter}
@@ -2862,14 +2864,14 @@ function FindingsContent({
                   className="bg-transparent text-xs text-zinc-200 outline-none cursor-pointer pr-1 capitalize"
                   aria-label="Filter by category"
                 >
-                  <option value="all" className="bg-[#111315] text-zinc-200">
+                  <option value="all" className="bg-zinc-900 text-zinc-200">
                     All Categories
                   </option>
                   {availableCategories.map((cat) => (
                     <option
                       key={cat}
                       value={cat}
-                      className="bg-[#111315] text-zinc-200 capitalize"
+                      className="bg-zinc-900 text-zinc-200 capitalize"
                     >
                       {cat}
                     </option>
@@ -2879,14 +2881,14 @@ function FindingsContent({
             )}
 
             {/* Severity filter selector */}
-            <div className="flex items-center gap-1 rounded-lg border border-white/[0.09] bg-white/[0.025] p-1 text-xs">
+            <div className="flex items-center gap-1 rounded-lg border border-zinc-800 bg-zinc-900/50 p-1 text-xs">
               {["all", "error", "warning", "info"].map((sev) => (
                 <button
                   key={sev}
                   onClick={() => setSeverityFilter(sev)}
                   className={`rounded-md px-2.5 py-1 transition capitalize ${
                     severityFilter === sev
-                      ? "bg-white/[0.1] text-white font-medium"
+                      ? "bg-zinc-700 text-zinc-100 font-medium"
                       : "text-zinc-500 hover:text-zinc-300"
                   }`}
                 >
@@ -2896,13 +2898,13 @@ function FindingsContent({
             </div>
 
             {/* View Mode Switcher */}
-            <div className="flex items-center gap-1 rounded-lg border border-white/[0.09] bg-white/[0.025] p-1 text-xs">
+            <div className="flex items-center gap-1 rounded-lg border border-zinc-800 bg-zinc-900/50 p-1 text-xs">
               <button
                 type="button"
                 onClick={() => setViewMode("grouped")}
                 className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 transition ${
                   viewMode === "grouped"
-                    ? "bg-white/[0.1] text-white font-medium"
+                    ? "bg-zinc-700 text-zinc-100 font-medium"
                     : "text-zinc-500 hover:text-zinc-300"
                 }`}
                 title="Group findings by repository"
@@ -2915,7 +2917,7 @@ function FindingsContent({
                 onClick={() => setViewMode("flat")}
                 className={`flex items-center gap-1.5 rounded-md px-2.5 py-1 transition ${
                   viewMode === "flat"
-                    ? "bg-white/[0.1] text-white font-medium"
+                    ? "bg-zinc-700 text-zinc-100 font-medium"
                     : "text-zinc-500 hover:text-zinc-300"
                 }`}
                 title="Show flat table list"
@@ -2959,7 +2961,7 @@ function FindingsContent({
       {viewMode === "grouped" ? (
         <div className="flex flex-col gap-5">
           {repoGroups.length === 0 || visibleFindings.length === 0 ? (
-            <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-12 text-center">
+            <div className="cl-card p-12 text-center pr-page--d2">
               <Search className="mx-auto size-5 text-zinc-700" />
               <p className="mt-3 text-sm text-zinc-400">
                 {allFindingsCount(repositories) === 0
@@ -2980,7 +2982,7 @@ function FindingsContent({
                   {/* Accordion Repository Header */}
                   <div
                     onClick={() => toggleRepoCollapse(group.repo.id)}
-                    className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between border-b border-white/[0.07] bg-white/[0.02] hover:bg-white/[0.04] cursor-pointer transition select-none"
+                    className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between border-b border-zinc-800/60 bg-zinc-900/20 hover:bg-zinc-800/30 cursor-pointer transition select-none"
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
                       <div className="text-zinc-400 hover:text-zinc-200 transition shrink-0">
@@ -3006,7 +3008,7 @@ function FindingsContent({
 
                     <div className="flex flex-wrap items-center gap-2 sm:shrink-0 text-xs">
                       {/* Total Findings Count */}
-                      <span className="rounded-md border border-white/[0.08] bg-white/[0.04] px-2 py-0.5 text-[11px] font-mono text-zinc-300">
+                      <span className="rounded-md border border-zinc-800 bg-zinc-800/50 px-2 py-0.5 text-[11px] font-mono text-zinc-300">
                         {group.findings.length}{" "}
                         {group.findings.length === 1 ? "finding" : "findings"}
                       </span>
@@ -3057,7 +3059,7 @@ function FindingsContent({
                         </div>
                       ) : (
                         <div>
-                          <div className="hidden grid-cols-[1fr_160px_120px_100px_140px] gap-4 border-b border-white/[0.05] bg-black/20 px-5 py-2.5 text-[10px] uppercase tracking-wider text-zinc-500 md:grid">
+                          <div className="hidden grid-cols-[1fr_160px_120px_100px_140px] gap-4 border-b border-zinc-800/60 bg-zinc-950/50 px-5 py-2.5 text-[10px] uppercase tracking-wider text-zinc-500 md:grid">
                             <span>Finding Message</span>
                             <span>Rule ID</span>
                             <span>Category</span>
@@ -3069,7 +3071,7 @@ function FindingsContent({
                             <button
                               key={finding.id}
                               onClick={() => onSelect(finding)}
-                              className="grid w-full items-center gap-4 border-b border-white/[0.04] px-5 py-3.5 text-left transition last:border-0 hover:bg-white/[0.035] md:grid-cols-[1fr_160px_120px_100px_140px]"
+                              className="grid w-full items-center gap-4 border-b border-zinc-800/40 px-5 py-3.5 text-left transition last:border-0 hover:bg-zinc-800/30 md:grid-cols-[1fr_160px_120px_100px_140px]"
                             >
                               <div className="min-w-0">
                                 <p className="truncate text-xs sm:text-sm text-zinc-200 font-medium">
@@ -3103,8 +3105,8 @@ function FindingsContent({
         </div>
       ) : (
         /* Flat List Mode */
-        <div className="overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.02]">
-          <div className="hidden grid-cols-[1fr_160px_120px_100px_120px] gap-4 border-b border-white/[0.07] px-5 py-3 text-[10px] uppercase tracking-wider text-zinc-600 md:grid">
+        <div className="cl-card overflow-hidden pr-page--d2">
+          <div className="hidden grid-cols-[1fr_160px_120px_100px_120px] gap-4 border-b border-zinc-800/60 bg-zinc-950/50 px-5 py-2.5 text-[10px] uppercase tracking-wider text-zinc-500 md:grid">
             <span>Finding Message</span>
             <span>Rule ID</span>
             <span>Category</span>
@@ -3117,7 +3119,7 @@ function FindingsContent({
               <button
                 key={finding.id}
                 onClick={() => onSelect(finding)}
-                className="grid w-full items-center gap-4 border-b border-white/[0.05] px-5 py-4 text-left transition last:border-0 hover:bg-white/[0.035] md:grid-cols-[1fr_160px_120px_100px_120px]"
+                className="grid w-full items-center gap-4 border-b border-zinc-800/40 px-5 py-4 text-left transition last:border-0 hover:bg-zinc-800/30 md:grid-cols-[1fr_160px_120px_100px_120px]"
               >
                 <div className="min-w-0">
                   <p className="truncate text-sm text-zinc-200 font-medium">
@@ -3174,7 +3176,7 @@ function AnalysisContent({
   analyzingRepoId: number | null;
 }) {
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-8 pr-page">
       <PageHeading
         eyebrow="Workspace / Analysis"
         title="Analysis Engine"
@@ -3182,44 +3184,64 @@ function AnalysisContent({
       />
 
       {repositories.length === 0 ? (
-        <div className="rounded-xl border border-white/[0.08] bg-white/[0.025] p-12 text-center text-sm text-zinc-500">
+        <div className="cl-card p-12 text-center text-sm text-zinc-500 pr-page--d2">
           <Activity className="mx-auto size-6 text-zinc-600 mb-2" />
           No repositories to analyze. Connect a repository first.
         </div>
       ) : (
-        <div className="space-y-4">
-          {repositories.map((repo) => (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+          {repositories.map((repo, i) => (
             <div
               key={repo.id}
-              className="rounded-xl border border-white/[0.08] bg-white/[0.025] p-5 flex items-center justify-between"
+              className={`cl-card p-5 flex flex-col justify-between hover:border-zinc-700 transition-colors pr-page--d${Math.min((i % 3) + 1, 3)}`}
             >
               <div>
-                <h3 className="font-mono text-sm font-medium text-zinc-200">
-                  {repo.full_name}
+                <div className="flex items-start justify-between">
+                  <span className="rounded bg-cyan-950/30 border border-cyan-900/50 px-2 py-0.5 font-mono text-[10px] text-cyan-400">
+                    {repo.default_branch || "main"}
+                  </span>
+                  {repo.lastAnalysis ? (
+                    <span className="text-[10px] uppercase font-bold text-emerald-500/80 tracking-wider">Analyzed</span>
+                  ) : null}
+                </div>
+                <h3 className="mt-4 font-mono text-sm font-semibold text-zinc-100 truncate" title={repo.name}>
+                  {repo.name}
                 </h3>
-                <p className="mt-1 text-xs text-zinc-500">
-                  {repo.filesCount || 0} stored files •{" "}
-                  {repo.findingsCount || 0} findings recorded
+                <p className="mt-1 text-xs text-zinc-500 truncate" title={repo.full_name}>
+                  {repo.full_name}
                 </p>
+                <div className="mt-4 flex items-center justify-between text-xs font-medium">
+                  <div className="flex items-center gap-1.5 text-zinc-400">
+                    <Code2 className="size-3.5" />
+                    <span>{repo.filesCount || 0} files</span>
+                  </div>
+                  <div className={`flex items-center gap-1.5 ${(repo.findingsCount || 0) > 0 ? "text-amber-400/80" : "text-emerald-400/80"}`}>
+                    <AlertTriangle className="size-3.5" />
+                    <span>{repo.findingsCount || 0} findings</span>
+                  </div>
+                </div>
               </div>
-              <Button
-                size="sm"
-                onClick={() => onAnalyze(repo.id, repo.full_name)}
-                disabled={analyzingRepoId === repo.id}
-                className="bg-cyan-300 text-black hover:bg-cyan-200"
-              >
-                {analyzingRepoId === repo.id ? (
-                  <>
-                    <Loader2 className="size-3.5 animate-spin mr-1.5" />
-                    Analyzing...
-                  </>
-                ) : (
-                  <>
-                    <Sparkles className="size-3.5 mr-1.5" />
-                    Run Analysis
-                  </>
-                )}
-              </Button>
+              
+              <div className="mt-6 border-t border-zinc-800/60 pt-4 flex justify-end">
+                <Button
+                  size="sm"
+                  onClick={() => onAnalyze(repo.id, repo.full_name)}
+                  disabled={analyzingRepoId === repo.id}
+                  className="cl-btn-primary w-auto"
+                >
+                  {analyzingRepoId === repo.id ? (
+                    <>
+                      <Loader2 className="size-3.5 animate-spin mr-1.5" />
+                      Analyzing...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="size-3.5 mr-1.5" />
+                      Run Analysis
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
           ))}
         </div>
