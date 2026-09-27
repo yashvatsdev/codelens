@@ -1,4 +1,4 @@
-import type {
+﻿import type {
   AIPRReviewResponse,
   AnalysisSummaryResponse,
   ApplyFixBranchResponse,
@@ -7,6 +7,7 @@ import type {
   FindingFixResponse,
   FindingResponse,
   FindingTestResponse,
+  FindingsTrendPoint,
   GitHubRepositoryCreate,
   HealthResponse,
   IngestionResponse,
@@ -295,6 +296,10 @@ export const api = {
   getPRReviewHistory: () => request<PRReviewHistoryItem[]>("/pr-reviews"),
   getPRReview: (reviewId: number) =>
     request<PRReviewDetailResponse>(`/pr-reviews/${reviewId}`),
+
+  // Dashboard
+  getFindingsTrend: () =>
+    request<FindingsTrendPoint[]>("/dashboard/findings-trend"),
 
   // Auth
   login: (data: UserLogin) =>

@@ -1,4 +1,4 @@
-"""Python static analysis engine using ast and line-by-line inspection."""
+﻿"""Python static analysis engine using ast and line-by-line inspection."""
 
 from __future__ import annotations
 
@@ -237,6 +237,20 @@ def analyze_repository(
         if progress_callback is not None:
             progress_callback(idx, total_analyzable, f"Analyzed {idx}/{total_analyzable} files ({len(all_findings)} findings)")
 
+    # Compute breakdown
+    errors = sum(1 for f in all_findings if f.severity == "error")
+    warnings = sum(1 for f in all_findings if f.severity == "warning")
+    info = sum(1 for f in all_findings if f.severity == "info")
+
+    from app.models.analysis_snapshot import AnalysisSnapshot
+    snapshot = AnalysisSnapshot(
+        repository_id=repository_id,
+        total_findings=len(all_findings),
+        errors=errors,
+        warnings=warnings,
+        info=info,
+    )
+    db.add(snapshot)
     db.commit()
 
     return AnalysisResult(
@@ -245,5 +259,6 @@ def analyze_repository(
         total_findings=len(all_findings),
         findings=all_findings,
     )
+
 
 

@@ -1,4 +1,4 @@
-import unittest
+﻿import unittest
 from unittest.mock import MagicMock, patch
 
 from app.api.routes.repositories import (
@@ -25,11 +25,13 @@ class TestEndToEndRepositoryWorkflow(unittest.TestCase):
     def setUp(self):
         self.db = SessionLocal()
         # Create a real test user so user_id FK constraints are satisfied
-        self.test_user = _UserModel(
-            email="workflow-test@codelens.test",
-            password_hash="testhash",
-        )
-        self.db.add(self.test_user)
+        self.test_user = self.db.query(_UserModel).filter_by(email="workflow-test@codelens.test").first()
+        if not self.test_user:
+            self.test_user = _UserModel(
+                email="workflow-test@codelens.test",
+                password_hash="testhash",
+            )
+            self.db.add(self.test_user)
         self.db.commit()
         self.db.refresh(self.test_user)
         self._cleanup()
@@ -161,3 +163,4 @@ class TestEndToEndRepositoryWorkflow(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

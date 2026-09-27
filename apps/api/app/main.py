@@ -1,9 +1,9 @@
-from fastapi import FastAPI, Request
+﻿from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
-from app.api.routes import auth, repositories
+from app.api.routes import auth, repositories, pr_reviews, dashboard
 from app.core.ai_errors import AIQuotaExceededError
 from app.db.database import engine
 
@@ -37,12 +37,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-from app.api.routes import auth, repositories, pr_reviews
 
 app.include_router(auth.router)
 app.include_router(repositories.router)
 app.include_router(pr_reviews.router)
-
+app.include_router(dashboard.router)
 
 @app.get("/health")
 def health():

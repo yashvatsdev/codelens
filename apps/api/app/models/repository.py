@@ -1,4 +1,4 @@
-from datetime import datetime
+﻿from datetime import datetime
 from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, Integer, String, func, ForeignKey, UniqueConstraint
@@ -7,6 +7,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.db.database import Base
 
 if TYPE_CHECKING:
+    from app.models.analysis_snapshot import AnalysisSnapshot
     from app.models.finding import Finding
     from app.models.source_file import SourceFile
     from app.models.user import User
@@ -41,6 +42,9 @@ class Repository(Base):
     )
     source_files: Mapped[list["SourceFile"]] = relationship(
         "SourceFile", cascade="all, delete-orphan"
+    )
+    analysis_snapshots: Mapped[list["AnalysisSnapshot"]] = relationship(
+        "AnalysisSnapshot", back_populates="repository", cascade="all, delete-orphan"
     )
 
     def __repr__(self) -> str:

@@ -237,3 +237,11 @@ export interface PRReviewDetailResponse {
   repository_name: string | null;
   repository_full_name: string | null;
 }
+
+export interface FindingsTrendPoint {
+  date: string;
+  findings: number;
+  errors: number;
+  warnings: number;
+  info: number;
+}
