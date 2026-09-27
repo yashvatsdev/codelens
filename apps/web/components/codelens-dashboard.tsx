@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -32,6 +32,7 @@ import {
   Settings2,
   ShieldAlert,
   ShieldCheck,
+  MessageSquare,
   Sparkles,
   TerminalSquare,
   Trash2,
@@ -40,6 +41,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PRReviewsContent } from "@/components/pr-reviews-content";
+import { AskCodeLensContent } from "@/components/ask-codelens-content";
 import { OverviewMetrics } from "@/components/dashboard/overview-metrics";
 import { FindingsTrend } from "@/components/dashboard/findings-trend";
 import { RepositoryRisk } from "@/components/dashboard/repository-risk";
@@ -80,6 +82,7 @@ type Section =
   | "Findings"
   | "Analysis"
   | "PR Reviews"
+  | "Ask CodeLens"
   | "Settings";
 
 interface RepoDetails extends RepositoryResponse {
@@ -157,6 +160,7 @@ const navItems = [
   { label: "Findings", icon: ShieldCheck },
   { label: "Analysis", icon: BarChart3 },
   { label: "PR Reviews", icon: GitPullRequest },
+  { label: "Ask CodeLens", icon: MessageSquare },
 ];
 
 export function CodeLensDashboard() {
@@ -940,6 +944,9 @@ export function CodeLensDashboard() {
               {active === "PR Reviews" && (
                 <PRReviewsContent repositories={repositories} />
               )}
+              {active === "Ask CodeLens" && (
+                <AskCodeLensContent repositories={repositories} />
+              )}
               {active === "Settings" && (
                 <SettingsContent backendHealthy={backendHealthy} />
               )}
@@ -1635,7 +1642,7 @@ export function CodeLensDashboard() {
                                     `fix: resolve ${selectedFinding?.rule_id || "issue"} in ${selectedFinding?.file_path || "file"}`,
                                   );
                                   setPrBodyInput(
-                                    `## 🛠️ CodeLens AI Proposed Fix\n\nThis Pull Request proposes an automated code fix for finding **\`${selectedFinding?.rule_id || ""}\`**.\n\n- **File:** \`${selectedFinding?.file_path || "unknown"}\`\n- **Severity:** \`${selectedFinding?.severity?.toUpperCase() || ""}\`\n- **Issue:** ${selectedFinding?.message || ""}\n- **Branch:** \`${gitHubApplyResult.branch_name}\`\n\n---\n*Created automatically by CodeLens*`,
+                                    `## ðŸ› ï¸ CodeLens AI Proposed Fix\n\nThis Pull Request proposes an automated code fix for finding **\`${selectedFinding?.rule_id || ""}\`**.\n\n- **File:** \`${selectedFinding?.file_path || "unknown"}\`\n- **Severity:** \`${selectedFinding?.severity?.toUpperCase() || ""}\`\n- **Issue:** ${selectedFinding?.message || ""}\n- **Branch:** \`${gitHubApplyResult.branch_name}\`\n\n---\n*Created automatically by CodeLens*`,
                                   );
                                   setCreatePRError(null);
                                 }}
@@ -2295,7 +2302,7 @@ function RepositoryHealthCard({
               onClick={onNavigateFindings}
               className="text-[11px] text-cyan-400 hover:text-cyan-300 transition"
             >
-              Explore →
+              Explore â†’
             </button>
           </div>
 
@@ -2346,11 +2353,11 @@ function RepositoryHealthCard({
         <div className="flex items-center gap-1.5">
           <span className="inline-block size-1 rounded-full bg-cyan-400" />
           <span>
-            Scoring Formula: Base 100 - (Errors × 15) - (Warnings × 5) - (Info ×
+            Scoring Formula: Base 100 - (Errors Ã— 15) - (Warnings Ã— 5) - (Info Ã—
             1), clamped [0, 100]
           </span>
         </div>
-        <div className="text-zinc-600">Deterministic · No AI inference</div>
+        <div className="text-zinc-600">Deterministic Â· No AI inference</div>
       </div>
     </section>
   );
@@ -2404,7 +2411,7 @@ function DashboardContent({
       {/* --- Row 0: Header --- */}
       <PageHeading
         eyebrow="Overview"
-        title={`${greeting} 👋`}
+        title={`${greeting} ðŸ‘‹`}
         description="Here's the current state of your codebases."
         action={
           <div className="flex items-center gap-3">
@@ -2946,7 +2953,7 @@ function FindingsContent({
               >
                 Expand all
               </button>
-              <span>·</span>
+              <span>Â·</span>
               <button
                 type="button"
                 onClick={collapseAll}

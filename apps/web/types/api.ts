@@ -245,3 +245,17 @@ export interface FindingsTrendPoint {
   warnings: number;
   info: number;
 }
+export interface AskSourceReference {
+  file_path: string;
+  start_line: number;
+  end_line: number;
+}
+
+export interface AskRequest {
+  question: string;
+}
+
+export interface AskResponse {
+  answer: string;
+  sources: AskSourceReference[];
+}

@@ -1,4 +1,6 @@
 ﻿import type {
+  AskRequest,
+  AskResponse,
   AIPRReviewResponse,
   AnalysisSummaryResponse,
   ApplyFixBranchResponse,
@@ -317,4 +319,9 @@ export const api = {
       method: "POST",
     }),
   getMe: () => request<UserResponse>("/auth/me"),
+  askRepository: (repositoryId: number, data: AskRequest) =>
+    request<AskResponse>(`/repositories/${repositoryId}/ask`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
 };
