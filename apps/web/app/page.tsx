@@ -1,11 +1,6 @@
-﻿import CodeLensDashboard from "@/components/codelens-dashboard";
-import AuthGuard from "@/components/auth-guard";
+﻿import "./landing.css";
+import CodeLensLanding from "@/components/landing/codelens-landing";
 
-export default function Home() {
-  return (
-    <AuthGuard>
-      <CodeLensDashboard />
-    </AuthGuard>
-  );
+export default function Page() {
+  return <CodeLensLanding />;
 }
-

@@ -28,7 +28,7 @@ export default function SignupPage() {
         name: name.trim() || undefined,
       });
       setUser(user);
-      router.replace("/");
+      router.replace("/dashboard");
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.status === 409) {

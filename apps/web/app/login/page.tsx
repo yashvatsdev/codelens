@@ -23,7 +23,7 @@ export default function LoginPage() {
     try {
       const user = await api.login({ email, password });
       setUser(user);
-      router.replace("/");
+      router.replace("/dashboard");
     } catch (err) {
       if (err instanceof ApiError) {
         if (err.status === 401) {
