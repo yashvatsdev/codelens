@@ -1642,7 +1642,7 @@ export function CodeLensDashboard() {
                                     `fix: resolve ${selectedFinding?.rule_id || "issue"} in ${selectedFinding?.file_path || "file"}`,
                                   );
                                   setPrBodyInput(
-                                    `## ðŸ› ï¸ CodeLens AI Proposed Fix\n\nThis Pull Request proposes an automated code fix for finding **\`${selectedFinding?.rule_id || ""}\`**.\n\n- **File:** \`${selectedFinding?.file_path || "unknown"}\`\n- **Severity:** \`${selectedFinding?.severity?.toUpperCase() || ""}\`\n- **Issue:** ${selectedFinding?.message || ""}\n- **Branch:** \`${gitHubApplyResult.branch_name}\`\n\n---\n*Created automatically by CodeLens*`,
+                                    `## 🛠️ CodeLens AI Proposed Fix\n\nThis Pull Request proposes an automated code fix for finding **\`${selectedFinding?.rule_id || ""}\`**.\n\n- **File:** \`${selectedFinding?.file_path || "unknown"}\`\n- **Severity:** \`${selectedFinding?.severity?.toUpperCase() || ""}\`\n- **Issue:** ${selectedFinding?.message || ""}\n- **Branch:** \`${gitHubApplyResult.branch_name}\`\n\n---\n*Created automatically by CodeLens*`,
                                   );
                                   setCreatePRError(null);
                                 }}
@@ -2302,7 +2302,7 @@ function RepositoryHealthCard({
               onClick={onNavigateFindings}
               className="text-[11px] text-cyan-400 hover:text-cyan-300 transition"
             >
-              Explore â†’
+              Explore &#x2192;
             </button>
           </div>
 
@@ -2353,11 +2353,11 @@ function RepositoryHealthCard({
         <div className="flex items-center gap-1.5">
           <span className="inline-block size-1 rounded-full bg-cyan-400" />
           <span>
-            Scoring Formula: Base 100 - (Errors Ã— 15) - (Warnings Ã— 5) - (Info Ã—
+            Scoring Formula: Base 100 - (Errors &#215; 15) - (Warnings &#215; 5) - (Info &#215;
             1), clamped [0, 100]
           </span>
         </div>
-        <div className="text-zinc-600">Deterministic Â· No AI inference</div>
+        <div className="text-zinc-600">Deterministic &#183; No AI inference</div>
       </div>
     </section>
   );
@@ -2411,7 +2411,7 @@ function DashboardContent({
       {/* --- Row 0: Header --- */}
       <PageHeading
         eyebrow="Overview"
-        title={`${greeting} ðŸ‘‹`}
+        title={`${greeting} 👋`}
         description="Here's the current state of your codebases."
         action={
           <div className="flex items-center gap-3">
@@ -2953,7 +2953,7 @@ function FindingsContent({
               >
                 Expand all
               </button>
-              <span>Â·</span>
+              <span>&#183;</span>
               <button
                 type="button"
                 onClick={collapseAll}
