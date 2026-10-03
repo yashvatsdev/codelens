@@ -40,15 +40,25 @@ FAKE_USER = SimpleNamespace(
 )
 
 
-@pytest.fixture(autouse=True, scope="session")
+@pytest.fixture(autouse=True)
 def sync_sequences():
     """Advance PostgreSQL sequences past any rows inserted with explicit IDs.
 
     Several test classes insert rows with explicit primary keys (e.g. User(id=1))
     to satisfy FK constraints. PostgreSQL SERIAL sequences are NOT advanced by
-    explicit-ID inserts. This fixture ensures every sequence starts at MAX(id)+1
-    before the test session begins, preventing nextval() collisions with
-    pre-seeded rows regardless of test execution order.
+    explicit-ID inserts.
+
+    This fixture runs before EVERY test (function scope, autouse=True).
+    That guarantees that after any setUp() inserts User(id=1), the sequence is
+    re-synchronized before the next test tries to insert a row with an implicit ID,
+    preventing nextval() collisions regardless of test execution order or whether
+    the test database is fresh or reused.
+
+    Example of the problem this solves on a fresh CI database:
+      1. test_analyzer.setUp() inserts User(id=1) — sequence stays at 1.
+      2. This fixture re-runs before test_ask.
+      3. MAX(id)=1, so setval sets next nextval() to 2.
+      4. test_ask.setUp() inserts User(email=...) — gets id=2, no collision.
 
     This fixture only affects the test database. It has no production impact.
     """
