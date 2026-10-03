@@ -23,10 +23,29 @@ class Settings(BaseSettings):
     auth_cookie_samesite: str = "lax"
     auth_token_expire_minutes: int = 60 * 24 * 7  # 7 days
 
+    # Google OAuth 2.0 / OpenID Connect
+    # Set these via environment variables: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI
+    google_client_id: str | None = None
+    google_client_secret: str | None = None
+    google_redirect_uri: str | None = None
+
+    # Frontend origin – used for post-OAuth redirects.
+    # Defaults to localhost:3000 for development.
+    frontend_url: str = "http://localhost:3000"
+
     model_config = SettingsConfigDict(
         env_file=str(_ENV_FILE),
         extra="ignore",
     )
+
+    @property
+    def google_oauth_configured(self) -> bool:
+        """True only when all three Google OAuth values are present."""
+        return bool(
+            self.google_client_id
+            and self.google_client_secret
+            and self.google_redirect_uri
+        )
 
 
 settings = Settings()

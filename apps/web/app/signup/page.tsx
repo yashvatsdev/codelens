@@ -7,6 +7,7 @@ import { api, ApiError } from "@/lib/api";
 import { useAuth } from "@/lib/auth-context";
 import { Button } from "@/components/ui/button";
 import { AuthLayout } from "@/components/auth-layout";
+import { GoogleSignInButton } from "@/components/google-sign-in-button";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -120,6 +121,19 @@ export default function SignupPage() {
           {loading ? "Creating account..." : "Create account"}
         </Button>
       </form>
+
+      <div className="mt-6 relative">
+        <div className="absolute inset-0 flex items-center">
+          <div className="w-full border-t border-zinc-800"></div>
+        </div>
+        <div className="relative flex justify-center text-sm">
+          <span className="px-2 bg-[#0a0a0a] text-zinc-500">OR</span>
+        </div>
+      </div>
+
+      <div className="mt-6">
+        <GoogleSignInButton />
+      </div>
 
       <p className="mt-6 text-center text-sm text-zinc-400">
         Already have an account?{" "}
