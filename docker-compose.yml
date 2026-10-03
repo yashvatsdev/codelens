@@ -1,0 +1,57 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: codelens
+      POSTGRES_PASSWORD: codelens_dev_password
+      POSTGRES_DB: codelens
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U codelens -d codelens"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql://codelens:codelens_dev_password@postgres:5432/codelens
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - GEMINI_MODEL=${GEMINI_MODEL:-gemini-3.6-flash}
+      - GITHUB_TOKEN=${GITHUB_TOKEN:-}
+      - AI_PROVIDER_MODE=${AI_PROVIDER_MODE:-hybrid}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://localhost:11434}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5-coder:7b}
+      - AUTH_SECRET_KEY=${AUTH_SECRET_KEY:-local_dev_secret_key_change_me}
+      - AUTH_COOKIE_SECURE=false
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+      - GOOGLE_REDIRECT_URI=${GOOGLE_REDIRECT_URI:-}
+      - FRONTEND_URL=${FRONTEND_URL:-http://localhost:3000}
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
+
+  test:
+    build:
+      context: ./apps/api
+      dockerfile: Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgresql://codelens:codelens_dev_password@postgres:5432/codelens_test
+    volumes:
+      - ./apps/api:/app
+    command: sh -c "pip install --no-cache-dir -r requirements-dev.txt && pytest -q"
+
+volumes:
+  postgres_data:
