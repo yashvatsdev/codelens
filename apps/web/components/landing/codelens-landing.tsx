@@ -18,15 +18,25 @@ function Mark() {
 
 function Navbar() {
   const [open, setOpen] = useState(false)
-  return <header className="nav-wrap">
-    <Link className="brand" href="/"><Mark /><span>CODELENS</span></Link>
-    <nav className={open ? 'nav-links open' : 'nav-links'} aria-label="Primary navigation">
-      <a href="#platform" onClick={() => setOpen(false)}>Platform</a><a href="#features" onClick={() => setOpen(false)}>Features</a><a href="#how" onClick={() => setOpen(false)}>How it works</a><a href="#security" onClick={() => setOpen(false)}>Security</a>
-    </nav>
-    <div className="nav-actions"><Link className="signin" href="/login">Sign in</Link><Link className="button small" href="/signup">Get started <span>↗</span></Link></div>
-    <button className="menu-button" aria-label="Toggle navigation" onClick={() => setOpen(!open)}><span /><span /></button>
-  </header>
+  return (
+    <header className="nav-outer" aria-label="Site header">
+      <div className="nav-pill">
+        <Link className="brand" href="/"><Mark /><span>CODELENS</span></Link>
+        <nav className={open ? 'nav-links open' : 'nav-links'} aria-label="Primary navigation">
+          <a href="#platform" onClick={() => setOpen(false)}>Platform</a>
+          <a href="#features" onClick={() => setOpen(false)}>Features</a>
+          <a href="#how" onClick={() => setOpen(false)}>How it works</a>
+          <a href="#security" onClick={() => setOpen(false)}>Security</a>
+        </nav>
+        <div className="nav-actions">
+          <Link className="nav-login" href="/login">Sign in <span aria-hidden="true">&#8599;</span></Link>
+        </div>
+        <button className="menu-button" aria-label="Toggle navigation" onClick={() => setOpen(!open)}><span /><span /></button>
+      </div>
+    </header>
+  )
 }
+
 
 function ProductPanel() {
   return <div className="product-shell">
