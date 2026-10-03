@@ -1,0 +1,72 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    name: Run backend test suite
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: codelens
+          POSTGRES_PASSWORD: codelens_test_password
+          POSTGRES_DB: codelens_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U codelens -d codelens_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
+    defaults:
+      run:
+        working-directory: apps/api
+
+    env:
+      DATABASE_URL: postgresql://codelens:codelens_test_password@localhost:5432/codelens_test
+      # All AI/GitHub calls in tests are mocked via unittest.mock.patch.
+      # These placeholders satisfy pydantic-settings validation without
+      # exposing real secrets or requiring repository secrets.
+      GEMINI_API_KEY: ""
+      GITHUB_TOKEN: ""
+      GOOGLE_CLIENT_ID: ""
+      GOOGLE_CLIENT_SECRET: ""
+      GOOGLE_REDIRECT_URI: ""
+      AUTH_SECRET_KEY: ci_test_secret_key_not_used_in_production
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Cache pip dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('apps/api/requirements.txt', 'apps/api/requirements-dev.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+
+      - name: Run Alembic migrations
+        run: alembic upgrade head
+
+      - name: Run test suite
+        run: pytest -q
