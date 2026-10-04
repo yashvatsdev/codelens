@@ -49,6 +49,7 @@ from app.services.github import (
     GitHubRateLimitError,
     GitHubRepoNotFoundError,
     GitHubServiceError,
+    RepositoryTooLargeError,
     fetch_github_metadata,
     parse_github_url,
 )
@@ -67,7 +68,7 @@ from app.services.test_generator import (
     TestGeneratorError,
     generate_test,
 )
-from app.services.ingestion import ingest_repository
+from app.services.ingestion import ingest_repository, RepositorySourceTooLargeError
 from app.services.pr_reviewer import (
     PRNotFoundError,
     review_pull_request,
@@ -528,6 +529,18 @@ def ingest_repository_endpoint(
             files_processed=result.files_fetched,
             files_total=result.files_fetched,
             message=f"Ingested {result.files_stored} files",
+        )
+    except (RepositoryTooLargeError, RepositorySourceTooLargeError) as e:
+        set_scan_progress(
+            repository_id=repository_id,
+            status="failed",
+            stage="failed",
+            progress=0,
+            message=str(e),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=str(e),
         )
     except GitHubRepoNotFoundError as e:
         set_scan_progress(

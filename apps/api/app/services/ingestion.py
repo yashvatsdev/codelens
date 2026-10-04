@@ -24,6 +24,20 @@ from app.services.github import (
 )
 
 
+class IngestionError(Exception):
+    """Base exception for repository ingestion errors."""
+    pass
+
+
+class RepositorySourceTooLargeError(IngestionError):
+    """Raised when the aggregate size of supported source files exceeds the limit."""
+    pass
+
+
+# Aggregate limit: Total size of all fetched source files cannot exceed 20 MB.
+MAX_TOTAL_SOURCE_BYTES: int = 20_000_000
+
+
 @dataclass
 class IngestionResult:
     """Summary returned after ingesting a repository's source files."""
@@ -60,10 +74,11 @@ def ingest_repository(
 
     Steps:
       1. Fetch the full recursive tree for the given branch.
-      2. Filter for supported source files (by extension and size).
-      3. Fetch the content of each supported file (up to max_files).
-      4. If db and repository_id are provided, persist files to the database.
-      5. Return an IngestionResult summary.
+      2. Filter for supported source files (by extension and size limits).
+      3. Apply aggregate size limits.
+      4. Fetch the content of each supported file (up to max_files).
+      5. If db and repository_id are provided, persist files to the database.
+      6. Return an IngestionResult summary.
 
     Files that fail to fetch are recorded in errors and skipped.
     """
@@ -90,15 +105,41 @@ def ingest_repository(
     result.files_skipped = len(supported_entries) - len(entries_to_fetch)
     total_to_fetch = len(entries_to_fetch)
 
+    # Enforce aggregate size limit BEFORE fetching contents
+    total_bytes_expected = sum(entry.size for entry in entries_to_fetch)
+    if total_bytes_expected > MAX_TOTAL_SOURCE_BYTES:
+        raise RepositorySourceTooLargeError(
+            f"Repository source files total {total_bytes_expected} bytes, "
+            f"exceeding the maximum allowed size of {MAX_TOTAL_SOURCE_BYTES} bytes."
+        )
+
     if progress_callback is not None:
         progress_callback(0, total_to_fetch, f"Found {total_to_fetch} files to fetch")
 
     fetched_contents: list[GitHubFileContent] = []
 
+    # Track actual bytes fetched just in case GitHub size metadata is inaccurate
+    actual_bytes_fetched = 0
+
     for idx, entry in enumerate(entries_to_fetch, start=1):
+        if actual_bytes_fetched + entry.size > MAX_TOTAL_SOURCE_BYTES:
+             # Failsafe if size metadata was wrong or we somehow exceeded limit
+             raise RepositorySourceTooLargeError(
+                 f"Repository source exceeds the maximum allowed size of {MAX_TOTAL_SOURCE_BYTES} bytes."
+             )
+
         try:
             file_content = fetch_file_content(owner, repo, entry.path)
+
+            # Additional safety check against actual content size
+            if actual_bytes_fetched + len(file_content.content.encode('utf-8')) > MAX_TOTAL_SOURCE_BYTES:
+                raise RepositorySourceTooLargeError(
+                    f"Repository source exceeds the maximum allowed size of {MAX_TOTAL_SOURCE_BYTES} bytes."
+                )
+
             fetched_contents.append(file_content)
+            actual_bytes_fetched += len(file_content.content.encode('utf-8'))
+
             result.fetched_files.append(
                 IngestionFileEntry(
                     path=file_content.path,
