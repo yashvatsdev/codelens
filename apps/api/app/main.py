@@ -1,10 +1,11 @@
-﻿from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from app.api.routes import auth, repositories, pr_reviews, dashboard, ask
 from app.core.ai_errors import AIQuotaExceededError
+from app.core.rate_limit import RateLimitMiddleware
 from app.db.database import engine
 
 app = FastAPI(
@@ -37,6 +38,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Rate limiting — added after CORS so 429 responses still carry CORS headers
+# for browser clients.
+app.add_middleware(RateLimitMiddleware)
+
 
 app.include_router(auth.router)
 app.include_router(repositories.router)
@@ -44,12 +49,14 @@ app.include_router(pr_reviews.router)
 app.include_router(dashboard.router)
 app.include_router(ask.router)
 
+
 @app.get("/health")
 def health():
     return {
         "status": "ok",
         "service": "codelens",
     }
+
 
 @app.get("/db/health")
 def db_health():

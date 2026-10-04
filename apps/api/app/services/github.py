@@ -4,7 +4,6 @@ import re
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
-from urllib.parse import urlparse
 from urllib.parse import quote, urlparse
 
 
@@ -25,6 +24,17 @@ class GitHubRateLimitError(GitHubServiceError):
 
 class GitHubAPIError(GitHubServiceError):
     """Raised when GitHub API returns an unexpected error."""
+    pass
+
+
+class RepositoryTooLargeError(GitHubServiceError):
+    """Raised when a repository tree exceeds the configured entry limit.
+
+    This prevents CodeLens from loading an extremely large GitHub recursive
+    tree entirely into memory before filtering.  The limit is applied before
+    any per-file size check so that a repository with millions of files
+    cannot exhaust application memory.
+    """
     pass
 
 
@@ -64,26 +74,37 @@ class GitHubFileContent:
     size: int
 
 
-# File extensions considered as analyzable source code.
+# ---------------------------------------------------------------------------
+# Resource limits
+# ---------------------------------------------------------------------------
+
+# Maximum size in bytes for a single source file that will be accepted.
+# Files larger than this are silently skipped during ingestion (is_supported_file).
+MAX_FILE_SIZE_BYTES: int = 100_000
+
+# Maximum number of entries (files + directories) allowed in a repository tree
+# response before rejecting the ingestion entirely.  This prevents loading
+# enormous recursive trees into memory before filtering.
+MAX_TREE_ENTRIES: int = 10_000
+
+
 SUPPORTED_EXTENSIONS: frozenset[str] = frozenset({
     ".py", ".js", ".ts", ".tsx", ".jsx",
     ".java", ".kt", ".kts",
     ".go", ".rs", ".rb",
     ".c", ".cpp", ".cc", ".cxx", ".h", ".hpp",
     ".cs", ".swift", ".m",
-    ".php", ".scala", ".ex", ".exs",
+    ".php", ".scala", ".r",
     ".sh", ".bash", ".zsh",
-    ".sql",
-    ".html", ".css", ".scss", ".less",
-    ".json", ".yaml", ".yml", ".toml",
-    ".md", ".txt", ".rst",
-    ".xml", ".graphql", ".proto",
-    ".dockerfile",
+    ".yaml", ".yml", ".json", ".toml", ".ini", ".cfg",
+    ".md", ".rst", ".txt",
+    ".sql", ".graphql", ".proto",
+    ".html", ".css", ".scss", ".sass", ".less",
+    ".lua", ".dart", ".ex", ".exs",
+    ".hs", ".ml", ".mli", ".clj", ".cljs",
+    ".v", ".vhd", ".verilog",
     ".tf", ".hcl",
 })
-
-# Maximum individual file size to fetch (100 KB).
-MAX_FILE_SIZE_BYTES: int = 100_000
 
 
 def is_supported_file(path: str, size: int = 0) -> bool:
@@ -102,12 +123,12 @@ def is_supported_file(path: str, size: int = 0) -> bool:
 
 def _github_api_request(url: str, timeout: int = 10) -> dict | list:
     from app.core.config import settings
-    
+
     headers = {
         "User-Agent": "CodeLens-App",
         "Accept": "application/vnd.github+json",
     }
-    
+
     if settings.github_token:
         headers["Authorization"] = f"Bearer {settings.github_token}"
 
@@ -267,6 +288,7 @@ def fetch_repo_tree(
 
     Returns a list of GitHubTreeEntry objects.
     Raises GitHubServiceError subclasses on failure.
+    Raises RepositoryTooLargeError if the tree exceeds MAX_TREE_ENTRIES entries.
     """
     api_url = (
         f"https://api.github.com/repos/{owner}/{repo}"
@@ -274,8 +296,17 @@ def fetch_repo_tree(
     )
     payload = _github_api_request(api_url, timeout=timeout)
 
+    raw_tree = payload.get("tree", [])
+
+    # Reject before materialising objects — protects against massive trees
+    if len(raw_tree) > MAX_TREE_ENTRIES:
+        raise RepositoryTooLargeError(
+            f"Repository tree contains {len(raw_tree)} entries, which exceeds "
+            f"the maximum of {MAX_TREE_ENTRIES}. Use a smaller repository."
+        )
+
     entries: list[GitHubTreeEntry] = []
-    for item in payload.get("tree", []):
+    for item in raw_tree:
         entries.append(
             GitHubTreeEntry(
                 path=item["path"],
@@ -301,7 +332,6 @@ def fetch_file_content(
     Returns a GitHubFileContent with the decoded text.
     Raises GitHubServiceError subclasses on failure.
     """
-    api_url = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}"
     encoded_path = quote(path.lstrip("/"), safe="/")
     api_url = f"https://api.github.com/repos/{owner}/{repo}/contents/{encoded_path}"
     payload = _github_api_request(api_url, timeout=timeout)

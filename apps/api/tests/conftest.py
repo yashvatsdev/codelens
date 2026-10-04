@@ -28,6 +28,7 @@ import pytest
 from sqlalchemy import text
 
 from app.api.deps import get_current_user  # noqa: F401 — re-exported for tests
+from app.core.rate_limit import reset_limiter
 from app.db.database import engine
 from app.main import app  # noqa: F401 — re-exported for tests
 
@@ -42,26 +43,38 @@ FAKE_USER = SimpleNamespace(
 
 @pytest.fixture(autouse=True)
 def sync_sequences():
-    """Advance PostgreSQL sequences past any rows inserted with explicit IDs.
+    """Advance PostgreSQL sequences and reset rate-limiter before every test.
 
-    Several test classes insert rows with explicit primary keys (e.g. User(id=1))
-    to satisfy FK constraints. PostgreSQL SERIAL sequences are NOT advanced by
-    explicit-ID inserts.
+    Two responsibilities:
 
-    This fixture runs before EVERY test (function scope, autouse=True).
-    That guarantees that after any setUp() inserts User(id=1), the sequence is
-    re-synchronized before the next test tries to insert a row with an implicit ID,
-    preventing nextval() collisions regardless of test execution order or whether
-    the test database is fresh or reused.
+    1. Sequence synchronisation:
+       Several test classes insert rows with explicit primary keys (e.g.
+       User(id=1)) to satisfy FK constraints.  PostgreSQL SERIAL sequences are
+       NOT advanced by explicit-ID inserts.  This fixture re-synchronises the
+       sequence so that implicit inserts in later tests receive IDs higher than
+       any explicitly inserted ID, preventing primary-key collisions regardless
+       of test execution order or whether the database is fresh or reused.
 
-    Example of the problem this solves on a fresh CI database:
-      1. test_analyzer.setUp() inserts User(id=1) — sequence stays at 1.
-      2. This fixture re-runs before test_ask.
-      3. MAX(id)=1, so setval sets next nextval() to 2.
-      4. test_ask.setUp() inserts User(email=...) — gets id=2, no collision.
+       Example:
+         1. test_analyzer.setUp() inserts User(id=1) — sequence stays at 1.
+         2. This fixture re-runs before test_ask.
+         3. MAX(id)=1, so setval makes the next nextval() return 2.
+         4. test_ask.setUp() inserts User(email=...) — gets id=2, no collision.
 
-    This fixture only affects the test database. It has no production impact.
+    2. Rate-limiter reset:
+       The application rate limiter uses an in-memory counter shared across
+       all requests to the same ``app`` singleton.  Without a reset between
+       tests, requests made in earlier tests (e.g. auth tests that POST to
+       /auth/signup) can consume the per-minute quota and cause subsequent
+       rate-limit tests to see unexpected 429 responses.
+
+       ``reset_limiter()`` replaces the in-memory storage object so all
+       counters start at zero before each test.
+
+    Both operations are test-infrastructure only.  Neither has any production
+    impact.
     """
+    reset_limiter()
     with engine.connect() as conn:
         conn.execute(text(
             "SELECT setval('users_id_seq', "

@@ -28,5 +28,4 @@ argon2-cffi
 PyJWT
 authlib>=1.3.0
 httpx>=0.27.0
-
-
+limits>=2.3
