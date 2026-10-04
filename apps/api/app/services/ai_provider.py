@@ -20,6 +20,10 @@ from typing import Any, TypeVar
 
 from pydantic import BaseModel
 
+MAX_AI_CONTEXT_CHARS = 120_000
+MAX_AI_OUTPUT_TOKENS = 4096
+CLOUD_TIMEOUT_MS = 60_000
+
 from app.core.ai_errors import (
     AI_UNAVAILABLE_MESSAGE,
     AIQuotaExceededError,
@@ -84,12 +88,17 @@ def call_cloud_ai(
     gemini_client = client
     if gemini_client is None:
         from google import genai
-        gemini_client = genai.Client(api_key=settings.gemini_api_key)
+        from google.genai import types
+        gemini_client = genai.Client(
+            api_key=settings.gemini_api_key,
+            http_options=types.HttpOptions(timeout=CLOUD_TIMEOUT_MS)
+        )
 
     from google.genai import types
 
     config_kwargs: dict[str, Any] = {
         "temperature": temperature,
+        "max_output_tokens": MAX_AI_OUTPUT_TOKENS,
     }
     if schema is not None:
         config_kwargs["response_mime_type"] = "application/json"
@@ -124,6 +133,7 @@ def call_ollama(
         "format": "json",
         "options": {
             "temperature": temperature,
+            "num_predict": MAX_AI_OUTPUT_TOKENS,
         },
     }
 
@@ -178,6 +188,10 @@ def generate_ai_response(
         AIQuotaExceededError: When quota is exceeded and fallback is not available or failed.
         AIUnavailableError: When AI services fail and cannot fulfill request.
     """
+
+    if len(prompt) > MAX_AI_CONTEXT_CHARS:
+        raise AIQuotaExceededError(f"AI context exceeds maximum allowed length of {MAX_AI_CONTEXT_CHARS} characters.")
+
     mode = force_provider or settings.ai_provider_mode or "hybrid"
 
     # Mode 1: Ollama only
