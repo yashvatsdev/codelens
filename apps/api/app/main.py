@@ -3,6 +3,9 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
+from app.core.config import settings
+from app.core.middleware import SecurityAndBodyLimitMiddleware
+
 from app.api.routes import auth, repositories, pr_reviews, dashboard, ask
 from app.core.ai_errors import AIQuotaExceededError
 from app.core.rate_limit import RateLimitMiddleware
@@ -32,7 +35,7 @@ def ai_quota_exception_handler(request: Request, exc: AIQuotaExceededError):
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
+    allow_origins=[settings.frontend_url],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -41,6 +44,7 @@ app.add_middleware(
 # Rate limiting — added after CORS so 429 responses still carry CORS headers
 # for browser clients.
 app.add_middleware(RateLimitMiddleware)
+app.add_middleware(SecurityAndBodyLimitMiddleware)
 
 
 app.include_router(auth.router)
