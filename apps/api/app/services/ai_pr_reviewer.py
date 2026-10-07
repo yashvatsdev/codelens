@@ -272,7 +272,7 @@ def generate_ai_pr_review(
     except AIQuotaExceededError:
         raise
     except Exception as exc:
-        logger.error(f"AI PR review generation failed: {exc}")
+        logger.error("AI PR review generation failed")
         if is_ai_quota_error(exc):
             raise AIQuotaExceededError() from exc
         raise AIPRReviewerError(sanitize_ai_error(exc)) from exc

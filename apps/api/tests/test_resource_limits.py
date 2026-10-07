@@ -134,8 +134,7 @@ def test_scan_concurrency_protection():
     }
     
     with patch("app.api.routes.repositories.Session.get", return_value=MagicMock(user_id=FAKE_USER.id)), \
-         patch("app.api.routes.repositories.is_scan_active", return_value=True), \
-         patch("app.api.routes.repositories.get_scan_progress", return_value=mock_running_state), \
+         patch("app.api.routes.repositories.claim_scan", return_value=(False, mock_running_state)), \
          patch("app.api.routes.repositories.BackgroundTasks.add_task") as mock_add_task:
         
         response = client.post("/repositories/1/scan")

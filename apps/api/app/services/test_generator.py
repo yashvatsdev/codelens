@@ -136,7 +136,7 @@ def generate_test(
     except AIQuotaExceededError:
         raise
     except Exception as exc:
-        logger.error(f"AI test generation failed: {exc}")
+        logger.error("AI test generation failed")
         if is_ai_quota_error(exc):
             raise AIQuotaExceededError() from exc
         raise TestGeneratorError(sanitize_ai_error(exc)) from exc

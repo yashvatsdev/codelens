@@ -548,7 +548,7 @@ class TestFixPRFindingEndpoint(unittest.TestCase):
             )
 
         self.assertEqual(response.status_code, 502)
-        self.assertIn("Model timeout", response.json()["detail"])
+        self.assertIn("AI service is temporarily unavailable", response.json()["detail"])
 
     def test_github_rate_limit_returns_429(self):
         """Returns 429 when GitHub rate limit is exceeded."""

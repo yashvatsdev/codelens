@@ -16,6 +16,7 @@ from starlette.testclient import TestClient
 from app.core.ai_errors import (
     AI_QUOTA_CODE,
     AI_QUOTA_MESSAGE,
+    AI_UNAVAILABLE_MESSAGE,
     AIQuotaExceededError,
     is_ai_quota_error,
     sanitize_ai_error,
@@ -59,9 +60,9 @@ class TestAIErrorsUtility(unittest.TestCase):
         self.assertNotIn("googleapis", sanitized.lower())
         self.assertNotIn("api_key", sanitized.lower())
 
-    def test_sanitize_ai_error_preserves_safe_messages(self):
+    def test_sanitize_ai_error_does_not_trust_unknown_messages(self):
         safe_msg = "Model timeout during AST parse"
-        self.assertEqual(sanitize_ai_error(safe_msg), safe_msg)
+        self.assertEqual(sanitize_ai_error(safe_msg), AI_UNAVAILABLE_MESSAGE)
 
 
 class TestAIErrorEndpoints(unittest.TestCase):

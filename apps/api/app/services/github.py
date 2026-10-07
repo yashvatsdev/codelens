@@ -161,11 +161,11 @@ def _github_api_request(url: str, timeout: int = 10) -> dict | list:
                 raise GitHubRateLimitError("GitHub API rate limit exceeded. Please try again later.") from err
             raise GitHubAPIError("CodeLens does not have permission to access this repository.") from err
         raise GitHubAPIError(
-            f"GitHub API returned error {err.code}: {err.reason}"
+            f"GitHub API returned error {err.code}."
         ) from err
     except urllib.error.URLError as err:
         raise GitHubAPIError(
-            f"Failed to reach GitHub API: {err.reason}"
+            "Failed to reach GitHub API."
         ) from err
     except TimeoutError as err:
         raise GitHubAPIError(
@@ -199,6 +199,8 @@ def parse_github_url(raw_url: str) -> ParsedGitHubRepo:
     if ssh_match:
         owner = ssh_match.group("owner")
         repo = ssh_match.group("repo")
+        if owner in (".", "..") or repo in (".", ".."):
+            raise ValueError("Invalid GitHub repository identifier")
         full_name = f"{owner}/{repo}"
         return ParsedGitHubRepo(
             owner=owner,
@@ -231,7 +233,7 @@ def parse_github_url(raw_url: str) -> ParsedGitHubRepo:
     if repo.endswith(".git"):
         repo = repo[:-4]
 
-    if not repo:
+    if not repo or owner in (".", "..") or repo in (".", ".."):
         raise ValueError("Invalid GitHub repository URL: repository name is missing")
 
     name_pattern = r"^[a-zA-Z0-9._-]+$"

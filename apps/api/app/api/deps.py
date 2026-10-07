@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.db.database import get_db
 from app.models.user import User
+from app.core.security import decode_session_user_id
 
 def get_token_from_cookie(request: Request) -> str | None:
     return request.cookies.get(settings.auth_cookie_name)
@@ -22,17 +23,8 @@ def get_current_user(
         )
     
     try:
-        payload = jwt.decode(
-            token, settings.auth_secret_key, algorithms=["HS256"]
-        )
-        user_id_str: str = payload.get("sub")
-        if user_id_str is None:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid authentication credentials",
-            )
-        user_id = int(user_id_str)
-    except (jwt.InvalidTokenError, ValueError):
+        user_id = decode_session_user_id(token)
+    except (jwt.InvalidTokenError, ValueError, TypeError):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication credentials",

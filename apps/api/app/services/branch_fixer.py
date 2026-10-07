@@ -127,7 +127,7 @@ def _authenticated_github_request(
                     "GitHub API rate limit exceeded. Please try again later."
                 ) from err
             raise GitHubCredentialsUnavailableError(
-                f"GitHub permission denied: {err.reason}"
+                "GitHub permission denied."
             ) from err
         if err.code == 404:
             raise GitHubRepoNotFoundError(
@@ -142,14 +142,12 @@ def _authenticated_github_request(
             raise PullRequestAlreadyExistsError(
                 "A pull request already exists for this branch."
             ) from err
-        detail_msg = f"{err.reason} {err_body}".strip() if err_body else str(err.reason)
         raise GitHubAPIError(
-            f"GitHub API returned error {err.code}: {err.reason}"
-            f"GitHub API returned error {err.code}: {detail_msg}"
+            f"GitHub API returned error {err.code}."
         ) from err
     except urllib.error.URLError as err:
         raise GitHubAPIError(
-            f"Failed to reach GitHub API: {err.reason}"
+            "Failed to reach GitHub API."
         ) from err
     except TimeoutError as err:
         raise GitHubAPIError(

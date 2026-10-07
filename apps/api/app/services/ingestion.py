@@ -18,6 +18,7 @@ from app.services.github import (
     GitHubFileContent,
     GitHubServiceError,
     GitHubTreeEntry,
+    MAX_FILE_SIZE_BYTES,
     fetch_file_content,
     fetch_repo_tree,
     is_supported_file,
@@ -130,6 +131,8 @@ def ingest_repository(
 
         try:
             file_content = fetch_file_content(owner, repo, entry.path)
+            if len(file_content.content.encode("utf-8")) > MAX_FILE_SIZE_BYTES:
+                raise RepositorySourceTooLargeError("Source file exceeds the maximum allowed size")
 
             # Additional safety check against actual content size
             if actual_bytes_fetched + len(file_content.content.encode('utf-8')) > MAX_TOTAL_SOURCE_BYTES:
