@@ -165,7 +165,7 @@ def generate_pr_finding_fix(
     except AIQuotaExceededError:
         raise
     except Exception as exc:
-        logger.error(f"AI API call for PR fix generation failed: {exc}")
+        logger.error("AI API call for PR fix generation failed")
         if is_ai_quota_error(exc):
             raise AIQuotaExceededError() from exc
         raise AIPRFixerError(sanitize_ai_error(exc)) from exc

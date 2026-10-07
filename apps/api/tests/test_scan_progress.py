@@ -286,4 +286,4 @@ class TestScanEndpointsIntegration(unittest.TestCase):
             self.assertEqual(status["stage"], "failed")
             self.assertEqual(status["progress"], 0)
             self.assertNotIn("Traceback", status["message"])
-            self.assertIn("rate limit", status["message"].lower())
+            self.assertEqual("Scan failed. Please try again later.", status["message"])

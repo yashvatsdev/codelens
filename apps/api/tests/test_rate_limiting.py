@@ -323,7 +323,7 @@ class TestScanRateLimit(RateLimitTestBase):
     """
 
     def test_above_limit_is_429(self):
-        with patch("app.api.routes.repositories.is_scan_active", return_value=False),              patch("app.api.routes.repositories.run_background_scan"):
+        with patch("app.api.routes.repositories.run_background_scan"):
             for _ in range(5):
                 self.client.post("/repositories/99999/scan")
             resp = self.client.post("/repositories/99999/scan")

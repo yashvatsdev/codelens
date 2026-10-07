@@ -200,7 +200,7 @@ def generate_ai_response(
             raw_text = call_ollama(prompt, schema=schema, temperature=temperature)
             return raw_text, "ollama"
         except Exception as exc:
-            logger.error(f"Ollama execution failed: {exc}")
+            logger.error("Local AI execution failed")
             raise AIUnavailableError(sanitize_ai_error(exc)) from exc
 
     # Mode 2: Hybrid (default) or Cloud-only
@@ -212,7 +212,7 @@ def generate_ai_response(
             return raw_text, "cloud"
         except Exception as exc:
             cloud_error = exc
-            logger.warning(f"Cloud AI call failed: {exc}")
+            logger.warning("Cloud AI call failed")
             # If not hybrid, or if error is not transient, do not fall back
             if mode != "hybrid" or not is_transient_cloud_error(exc):
                 if is_ai_quota_error(exc):
@@ -231,7 +231,7 @@ def generate_ai_response(
         raw_text = call_ollama(prompt, schema=schema, temperature=temperature)
         return raw_text, "ollama"
     except Exception as ollama_exc:
-        logger.error(f"Ollama fallback failed: {ollama_exc}")
+        logger.error("Local AI fallback failed")
         # Both failed: return provider-neutral error
         if cloud_error and is_ai_quota_error(cloud_error):
             raise AIQuotaExceededError() from cloud_error

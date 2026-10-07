@@ -40,7 +40,7 @@ from app.schemas.repository import (
 from app.services.analyzer import analyze_repository
 from app.services.scan_progress import (
     get_scan_progress,
-    is_scan_active,
+    claim_scan,
     set_scan_progress,
     update_scan_progress,
 )
@@ -230,26 +230,19 @@ def create_repository(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    # If explicit details are missing, attempt to parse them from the provided URL
-    if not (repository_in.name and repository_in.owner and repository_in.full_name):
-        try:
-            parsed = parse_github_url(repository_in.url)
-            name = repository_in.name or parsed.name
-            owner = repository_in.owner or parsed.owner
-            full_name = repository_in.full_name or parsed.full_name
-            canonical_url = parsed.url
-            github_id = repository_in.github_id or full_name
-        except ValueError as e:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=str(e),
-            )
-    else:
-        name = repository_in.name
-        owner = repository_in.owner
-        full_name = repository_in.full_name
-        canonical_url = repository_in.url
-        github_id = repository_in.github_id or full_name
+    # Explicit metadata must not bypass the URL trust boundary.
+    try:
+        parsed = parse_github_url(repository_in.url)
+        for supplied, expected in ((repository_in.name, parsed.name),
+                                   (repository_in.owner, parsed.owner),
+                                   (repository_in.full_name, parsed.full_name)):
+            if supplied is not None and supplied != expected:
+                raise ValueError("Repository metadata must match the GitHub URL")
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    name, owner, full_name = parsed.name, parsed.owner, parsed.full_name
+    canonical_url = parsed.url
+    github_id = repository_in.github_id or full_name
 
     existing = db.execute(
         select(Repository).where(
@@ -404,7 +397,7 @@ def run_background_scan(repository_id: int) -> None:
         )
 
     except Exception as exc:
-        clean_error = sanitize_ai_error(exc) if hasattr(exc, "__str__") else "Scan failed unexpectedly"
+        clean_error = "Scan failed. Please try again later."
         set_scan_progress(
             repository_id=repository_id,
             status="failed",
@@ -454,20 +447,9 @@ def start_repository_scan(
             detail=f"Repository with id {repository_id} not found",
         )
 
-    if is_scan_active(repository_id):
-        # Scan is already running: return existing status without starting duplicate
-        return get_scan_progress(repository_id)
-
-    # Initialize queued state
-    initial_state = set_scan_progress(
-        repository_id=repository_id,
-        status="queued",
-        stage="preparing",
-        progress=0,
-        files_processed=0,
-        files_total=0,
-        message="Scan queued...",
-    )
+    claimed, initial_state = claim_scan(repository_id)
+    if not claimed:
+        return initial_state
 
     background_tasks.add_task(run_background_scan, repository_id)
     return initial_state
@@ -491,6 +473,8 @@ def ingest_repository_endpoint(
             detail=f"Repository with id {repository_id} not found",
         )
 
+    if not claim_scan(repository_id)[0]:
+        raise HTTPException(status_code=409, detail="A repository scan is already active")
     set_scan_progress(
         repository_id=repository_id,
         status="running",
@@ -627,6 +611,8 @@ def analyze_repository_endpoint(
             detail=f"Repository with id {repository_id} not found",
         )
 
+    if not claim_scan(repository_id)[0]:
+        raise HTTPException(status_code=409, detail="A repository scan is already active")
     set_scan_progress(
         repository_id=repository_id,
         status="running",

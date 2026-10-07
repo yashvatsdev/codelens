@@ -133,9 +133,11 @@ def ask_repository(
             response.answer = "I couldn't find enough relevant code in this repository to answer that confidently."
             
         return response
-    except (AIUnavailableError, AIQuotaExceededError) as e:
-        logger.error(f"AI error in ask: {e}")
+    except AIQuotaExceededError:
+        raise
+    except AIUnavailableError as e:
+        logger.error("AI service unavailable during Ask")
         raise HTTPException(status_code=503, detail=sanitize_ai_error(e))
     except Exception as e:
-        logger.error(f"Unexpected error in ask: {e}")
+        logger.error("Unexpected generation failure during Ask")
         raise HTTPException(status_code=500, detail="An internal error occurred during generation.")

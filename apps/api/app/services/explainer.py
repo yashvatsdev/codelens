@@ -166,7 +166,7 @@ def explain_finding(
     except AIQuotaExceededError:
         raise
     except Exception as exc:
-        logger.error(f"AI explainer generation failed: {exc}")
+        logger.error("AI explainer generation failed")
         if is_ai_quota_error(exc):
             raise AIQuotaExceededError() from exc
         raise ExplainerError(sanitize_ai_error(exc)) from exc

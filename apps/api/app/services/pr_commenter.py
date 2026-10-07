@@ -217,14 +217,14 @@ def post_github_pr_comment(
                     "GitHub API rate limit exceeded. Please try again later."
                 ) from err
             raise GitHubCredentialsUnavailableError(
-                f"GitHub permission denied: {err.reason}"
+                "GitHub permission denied."
             ) from err
         raise GitHubAPIError(
-            f"GitHub API returned error {err.code}: {err.reason}"
+            f"GitHub API returned error {err.code}."
         ) from err
     except urllib.error.URLError as err:
         raise GitHubAPIError(
-            f"Failed to reach GitHub API: {err.reason}"
+            "Failed to reach GitHub API."
         ) from err
     except TimeoutError as err:
         raise GitHubAPIError(
@@ -288,8 +288,7 @@ def create_pr_review_comment(
             ai_review_succeeded = True
         except Exception as exc:
             logger.warning(
-                "Gemini AI PR review generation failed, falling back to static analysis findings: %s",
-                exc,
+                "AI PR review generation failed, falling back to static analysis findings",
             )
 
     if not ai_review_succeeded:

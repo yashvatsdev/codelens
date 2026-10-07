@@ -140,12 +140,13 @@ _PROVIDER_PATTERNS = [
 def sanitize_ai_error(exc: Exception | str) -> str:
     """Sanitize any AI provider error to avoid leaking provider details or internal metrics.
 
-    If the error message contains provider-specific details (Gemini, Google, Ollama, quotaId, URLs),
-    returns a friendly generic AI unavailable message. Otherwise preserves clean messages.
+    Unknown exception strings are never safe merely because a pattern did not
+    match: they may include credentials or source code. Always return the stable
+    provider-neutral unavailable message; quota errors have a separate handler.
     """
     raw = str(exc).strip()
     for pattern in _PROVIDER_PATTERNS:
         if pattern.search(raw):
             return AI_UNAVAILABLE_MESSAGE
-    return raw or AI_UNAVAILABLE_MESSAGE
+    return AI_UNAVAILABLE_MESSAGE
 

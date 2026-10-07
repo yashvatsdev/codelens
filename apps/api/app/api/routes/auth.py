@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from pydantic import ValidationError
 
 from app.api.deps import get_current_user
@@ -220,17 +221,21 @@ async def google_callback(
     # --- 4. Extract and validate required claims ---
     google_sub: str | None = claims.get("sub")
     email: str | None = claims.get("email")
-    email_verified: bool = bool(claims.get("email_verified", False))
+    email_verified: bool = claims.get("email_verified") is True
     name: str | None = claims.get("name")
 
-    if not google_sub:
+    if not isinstance(google_sub, str) or not google_sub or len(google_sub) > 255:
         return _fail_redirect(reason="missing_sub")
 
-    if not email or not email_verified:
+    if not isinstance(email, str) or not email or not email_verified:
         return _fail_redirect(reason="unverified_email")
 
     # --- 5. User resolution (Cases A/B/C/D) ---
-    user = _resolve_user(db, google_sub=google_sub, email=email, name=name)
+    try:
+        user = _resolve_user(db, google_sub=google_sub, email=email, name=name)
+    except IntegrityError:
+        db.rollback()
+        return _fail_redirect(reason="identity_conflict")
     if user is None:
         # Conflict: google_sub belongs to one user, email to another — refuse silently
         return _fail_redirect(reason="identity_conflict")
@@ -277,6 +282,8 @@ def _resolve_user(
 
     if user_by_email is not None:
         # CASE B: existing CodeLens account — link Google identity.
+        if user_by_email.google_sub is not None:
+            return None  # Never replace an already linked different identity.
         user_by_email.google_sub = google_sub
         if not user_by_email.name and name:
             user_by_email.name = name
@@ -302,10 +309,12 @@ def _fail_redirect(reason: str) -> RedirectResponse:
     Redirect to the frontend login page with a provider-neutral error code.
     Never exposes tokens, secrets, or internal details.
     """
-    return RedirectResponse(
+    response = RedirectResponse(
         url=f"{settings.frontend_url}/login?error={reason}",
         status_code=status.HTTP_302_FOUND,
     )
+    _clear_oauth_state_cookies(response)
+    return response
 
 
 def _constant_time_compare(val1: str, val2: str) -> bool:

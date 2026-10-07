@@ -1,6 +1,8 @@
 
 import typing
+from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send, Message
+from app.core.config import settings
 
 MAX_REQUEST_BODY_BYTES = 1_000_000  # 1 MB
 
@@ -20,31 +22,6 @@ class SecurityAndBodyLimitMiddleware:
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
-
-        # 1. Check Content-Length upfront
-        content_length_header = next(
-            (v for k, v in scope["headers"] if k.lower() == b"content-length"), None
-        )
-        if content_length_header is not None:
-            try:
-                if int(content_length_header) > self.max_body_size:
-                    await self._send_413(send)
-                    return
-            except ValueError:
-                pass  # Ignore malformed Content-Length and let it fail downstream
-
-        # 2. Track chunked or unspecified body size
-        total_bytes = 0
-
-        async def receive_wrapper() -> Message:
-            nonlocal total_bytes
-            message = await receive()
-            if message["type"] == "http.request":
-                body = message.get("body", b"")
-                total_bytes += len(body)
-                if total_bytes > self.max_body_size:
-                    raise RequestBodyTooLargeError("REQUEST_BODY_TOO_LARGE")
-            return message
 
         is_secure = scope.get("scheme") == "https"
         path = scope.get("path", "")
@@ -69,19 +46,52 @@ class SecurityAndBodyLimitMiddleware:
                     
             await send(message)
 
-        try:
-            await self.app(scope, receive_wrapper, send_wrapper)
-        except RequestBodyTooLargeError:
-            await self._send_413(send)
+        headers = {k.lower(): v for k, v in scope["headers"]}
+        if scope.get("method") not in ("GET", "HEAD", "OPTIONS"):
+            origin = headers.get(b"origin")
+            if ((origin is not None and origin.decode("latin-1") != settings.frontend_url)
+                    or (origin is None and headers.get(b"sec-fetch-site") == b"cross-site")):
+                await JSONResponse(status_code=403, content={"detail": "Untrusted request origin"})(scope, receive, send_wrapper)
+                return
+
+        # Reject before parsing: parsers can catch exceptions from receive and
+        # turn an overflow into 400, or start a response before the body is read.
+        length = headers.get(b"content-length")
+        if length is not None:
+            try:
+                if int(length) > self.max_body_size:
+                    await self._send_413(send_wrapper)
+                    return
+            except ValueError:
+                pass
+        body = bytearray()
+        while True:
+            message = await receive()
+            if message["type"] == "http.disconnect":
+                return
+            chunk = message.get("body", b"")
+            if len(body) + len(chunk) > self.max_body_size:
+                await self._send_413(send_wrapper)
+                return
+            body.extend(chunk)
+            if not message.get("more_body", False):
+                break
+        delivered = False
+
+        async def receive_wrapper() -> Message:
+            nonlocal delivered
+            if not delivered:
+                delivered = True
+                return {"type": "http.request", "body": bytes(body), "more_body": False}
+            return await receive()
+
+        await self.app(scope, receive_wrapper, send_wrapper)
 
     async def _send_413(self, send: Send) -> None:
         response_body = b'{"detail": "Request body too large.", "code": "REQUEST_BODY_TOO_LARGE"}'
         headers = [
             (b"content-type", b"application/json"),
             (b"content-length", str(len(response_body)).encode("ascii")),
-            (b"x-content-type-options", b"nosniff"),
-            (b"x-frame-options", b"DENY"),
-            (b"referrer-policy", b"strict-origin-when-cross-origin"),
         ]
         await send({"type": "http.response.start", "status": 413, "headers": headers})
         await send({"type": "http.response.body", "body": response_body})

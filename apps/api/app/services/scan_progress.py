@@ -98,3 +98,15 @@ def clear_scan_progress(repository_id: int | None = None) -> None:
         else:
             _scan_store.clear()
 
+
+def claim_scan(repository_id: int) -> tuple[bool, dict[str, Any]]:
+    """Check and claim a scan in one critical section, across all entrypoints."""
+    with _lock:
+        current = _scan_store.get(repository_id)
+        if current and current.get("status") in ("queued", "running"):
+            return False, dict(current)
+        current = _default_idle_state(repository_id)
+        current.update(status="queued", stage="preparing", message="Scan queued...")
+        _scan_store[repository_id] = current
+        return True, dict(current)
+

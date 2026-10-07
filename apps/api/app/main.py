@@ -1,6 +1,7 @@
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.exceptions import RequestValidationError
 from sqlalchemy import text
 
 from app.core.config import settings
@@ -33,6 +34,18 @@ def ai_quota_exception_handler(request: Request, exc: AIQuotaExceededError):
     )
 
 
+@app.exception_handler(RequestValidationError)
+def validation_exception_handler(request: Request, exc: RequestValidationError):
+    # Never echo submitted credentials, source code or arbitrary error context.
+    return JSONResponse(status_code=422, content={"detail": [
+        {"loc": error["loc"], "type": error["type"], "msg": "Invalid request value"}
+        for error in exc.errors()
+    ]})
+
+
+# Last registered middleware is outermost. CORS must wrap direct 429/413.
+app.add_middleware(RateLimitMiddleware)
+app.add_middleware(SecurityAndBodyLimitMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[settings.frontend_url],
@@ -40,12 +53,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Rate limiting — added after CORS so 429 responses still carry CORS headers
-# for browser clients.
-app.add_middleware(RateLimitMiddleware)
-app.add_middleware(SecurityAndBodyLimitMiddleware)
-
 
 app.include_router(auth.router)
 app.include_router(repositories.router)
@@ -74,12 +81,12 @@ def db_health():
             "database": "connected",
         }
 
-    except Exception as e:
+    except Exception:
         return JSONResponse(
             status_code=503,
             content={
                 "status": "error",
                 "database": "disconnected",
-                "detail": str(e),
+                "detail": "Database unavailable",
             },
         )

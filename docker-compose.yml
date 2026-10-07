@@ -32,7 +32,7 @@ services:
       - AI_PROVIDER_MODE=${AI_PROVIDER_MODE:-hybrid}
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://localhost:11434}
       - OLLAMA_MODEL=${OLLAMA_MODEL:-qwen2.5-coder:7b}
-      - AUTH_SECRET_KEY=${AUTH_SECRET_KEY:-local_dev_secret_key_change_me}
+      - AUTH_SECRET_KEY=${AUTH_SECRET_KEY:?Set an explicit signing key of at least 32 characters}
       - AUTH_COOKIE_SECURE=false
       - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
       - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
@@ -49,6 +49,7 @@ services:
         condition: service_healthy
     environment:
       - DATABASE_URL=postgresql://codelens:codelens_dev_password@postgres:5432/codelens_test
+      - AUTH_SECRET_KEY=${AUTH_SECRET_KEY:?Set an explicit signing key of at least 32 characters}
     volumes:
       - ./apps/api:/app
     command: sh -c "pip install --no-cache-dir -r requirements-dev.txt && pytest -q"

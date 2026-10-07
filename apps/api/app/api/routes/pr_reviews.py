@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -16,7 +16,7 @@ router = APIRouter(prefix="/pr-reviews", tags=["pr-reviews"])
 def get_pr_review_history(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-    limit: int = 50,
+    limit: int = Query(default=50, ge=1, le=100),
 ):
     """Get the current user's PR review history."""
     reviews = (

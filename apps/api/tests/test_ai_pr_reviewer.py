@@ -564,7 +564,7 @@ class TestAIPRReviewEndpoint(unittest.TestCase):
             response = self.client.post(f"/repositories/{repo.id}/pull-requests/1/ai-review")
             self.assertEqual(response.status_code, 502)
             data = response.json()
-            self.assertIn("Service connection failed", data["detail"])
+            self.assertIn("AI service is temporarily unavailable", data["detail"])
 
     @patch("app.api.routes.repositories.generate_ai_pr_review")
     @patch("app.api.routes.repositories.review_pull_request")

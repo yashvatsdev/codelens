@@ -25,17 +25,17 @@ How limits are applied
 ----------------------
 ``ROUTE_LIMITS`` is a list of ``(HTTP_method, path_glob, limit_string)``
 tuples evaluated top-to-bottom.  The first matching rule wins.  If no rule
-matches the global ``DEFAULT_LIMIT`` is used.
+matches the global ``DEFAULT_LIMIT`` is used. Specific rules additionally share
+that client-wide budget, except health probes with their own limits. Counters
+use canonical operation patterns, not individual resource IDs or raw paths.
 
 Path globs use ``fnmatch`` syntax.  ``*`` matches any characters within a
 single path segment (or across segments -- fnmatch treats the whole string).
 
 Client identification
 ---------------------
-Authenticated requests: the CodeLens JWT session cookie is decoded (without
-signature/expiry verification -- the normal auth dependency handles that) to
-extract ``sub`` (user ID).  This prevents a single user from bypassing limits
-by rotating IPs.
+Authenticated requests: the session signature, expiry and subject are verified
+before identity is used. Public auth flows always use the remote IP.
 
 Unauthenticated requests: ``request.client.host`` (remote IP) is used.
 
@@ -75,6 +75,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse, Response
 
 from app.core.config import settings
+from app.core.security import decode_session_user_id
 
 logger = logging.getLogger(__name__)
 
@@ -129,9 +130,12 @@ ROUTE_LIMITS: list[tuple[str, str, str]] = [
     ("POST", "/repositories/github/metadata",  "30/minute"),
     ("GET",  "/repositories/github/metadata",  "30/minute"),
     ("POST", "/repositories/github",           "10/minute"),
+    ("POST", "/repositories",                  "10/minute"),
 
     # Scan  (expensive background job)
     ("POST", "/repositories/*/scan",           "5/hour"),
+    ("POST", "/repositories/*/ingest",         "5/hour"),
+    ("POST", "/repositories/*/analyze",        "5/hour"),
 
     # AI endpoints
     ("POST", "/repositories/*/ask",                        "20/hour"),
@@ -139,6 +143,10 @@ ROUTE_LIMITS: list[tuple[str, str, str]] = [
     ("POST", "/repositories/*/findings/*/fix",             "10/hour"),
     ("POST", "/repositories/*/findings/*/test",            "10/hour"),
     ("POST", "/repositories/*/pull-requests/*/ai-review",  "5/hour"),
+    ("POST", "/repositories/*/findings/*/apply-fix",       "10/hour"),
+    ("POST", "/repositories/*/findings/*/create-pr",       "10/hour"),
+    ("POST", "/repositories/*/pull-requests/*/findings/fix", "10/hour"),
+    ("POST", "/repositories/*/pull-requests/*/comment",    "5/hour"),
 
     # Health  (raised limit so Render probes are never blocked)
     ("GET",  "/health",    "120/minute"),
@@ -148,12 +156,23 @@ ROUTE_LIMITS: list[tuple[str, str, str]] = [
 
 def _match_path(method: str, path: str) -> str:
     """Return the limit string for the first matching rule, or DEFAULT_LIMIT."""
+    return _match_rule(method, path)[1]
+
+
+def _canonical_path(path: str) -> str:
+    return "/" + "/".join(segment for segment in path.split("/") if segment)
+
+
+def _match_rule(method: str, path: str) -> tuple[str, str]:
+    path = _canonical_path(path)
     for rule_method, rule_pattern, limit_str in ROUTE_LIMITS:
         if rule_method not in ("*", method):
             continue
-        if fnmatch.fnmatch(path, rule_pattern):
-            return limit_str
-    return DEFAULT_LIMIT
+        if fnmatch.fnmatchcase(path, rule_pattern):
+            # Alternate repository-connection routes share one budget.
+            bucket = "/repositories/connect" if rule_pattern in ("/repositories", "/repositories/github") and method == "POST" else rule_pattern
+            return bucket, limit_str
+    return "default", DEFAULT_LIMIT
 
 
 def _get_client_key(request: Request) -> str:
@@ -165,17 +184,10 @@ def _get_client_key(request: Request) -> str:
     Falls back to ``request.client.host`` for unauthenticated requests.
     """
     cookie = request.cookies.get(settings.auth_cookie_name)
-    if cookie:
+    if cookie and not _canonical_path(request.url.path).startswith("/auth/"):
         try:
-            payload = jwt.decode(
-                cookie,
-                options={"verify_signature": False},
-                algorithms=["HS256"],
-            )
-            sub = payload.get("sub")
-            if sub:
-                return f"user:{sub}"
-        except Exception:
+            return f"user:{decode_session_user_id(cookie)}"
+        except (jwt.InvalidTokenError, ValueError, TypeError):
             pass  # malformed token -- fall back to IP
     host = (request.client.host if request.client else None) or "unknown"
     return f"ip:{host}"
@@ -189,17 +201,22 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     """
 
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
-        path = request.url.path
+        path = _canonical_path(request.url.path)
         method = request.method
 
-        limit_str = _match_path(method, path)
+        bucket, limit_str = _match_rule(method, path)
         item = parse_limit(limit_str)
         key = _get_client_key(request)
-        # Namespace by method+path so limits are independent per endpoint.
-        namespace = f"rl:{method}:{path}"
+        # A rule is one operation budget across all resource IDs and methods.
+        namespace = f"rl:{bucket}"
 
         # Access via module global so reset_limiter() is respected.
         allowed = _state.limiter.hit(item, namespace, key)
+        if allowed and bucket != "default" and path not in ("/health", "/db/health"):
+            global_item = parse_limit(DEFAULT_LIMIT)
+            allowed = _state.limiter.hit(global_item, "rl:default", key)
+            if not allowed:
+                item, namespace = global_item, "rl:default"
 
         if not allowed:
             try:

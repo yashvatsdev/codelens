@@ -14,6 +14,7 @@ import json
 import re
 import urllib.error
 import urllib.request
+from urllib.parse import urlparse
 from dataclasses import dataclass, field
 
 from app.services.analyzer import analyze_source_file, ANALYZABLE_EXTENSIONS, get_file_extension
@@ -80,6 +81,10 @@ def _github_api_request(url: str, timeout: int = 15) -> dict | list:
     Reuses the same User-Agent and Accept headers as the existing
     GitHub service, and maps HTTP errors to the same exception hierarchy.
     """
+    parsed = urlparse(url)
+    if (parsed.scheme != "https" or parsed.netloc != "api.github.com"
+            or not parsed.path.startswith("/repos/") or parsed.fragment):
+        raise GitHubAPIError("Unexpected GitHub content URL")
     req = urllib.request.Request(
         url,
         headers={
@@ -101,11 +106,11 @@ def _github_api_request(url: str, timeout: int = 15) -> dict | list:
                 "GitHub API rate limit exceeded. Please try again later."
             ) from err
         raise GitHubAPIError(
-            f"GitHub API returned error {err.code}: {err.reason}"
+            f"GitHub API returned error {err.code}."
         ) from err
     except urllib.error.URLError as err:
         raise GitHubAPIError(
-            f"Failed to reach GitHub API: {err.reason}"
+            "Failed to reach GitHub API."
         ) from err
     except TimeoutError as err:
         raise GitHubAPIError(

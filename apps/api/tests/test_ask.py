@@ -204,7 +204,7 @@ class TestAskCodeLens(unittest.TestCase):
             json={"question": "login"}
         )
         self.assertEqual(response.status_code, 503)
-        self.assertIn("Model offline", response.json()["detail"])
+        self.assertIn("AI service is temporarily unavailable", response.json()["detail"])
 
 if __name__ == "__main__":
     unittest.main()
